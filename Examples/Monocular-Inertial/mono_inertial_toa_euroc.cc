@@ -1,3 +1,7 @@
+//This is developed for now just to work with one sequence, 
+//for more sequences just it is required to take care of TOA dataset, the waw they are read
+//no need to other changes
+
 #include<iostream>
 #include<algorithm>
 #include<fstream>
@@ -21,9 +25,6 @@ void LoadTOA(const string strToaPath, vector<double> &vTimeStamps,  vector<vecto
 double ttrack_tot = 0;
 int main(int argc, char *argv[])
 {
-    //testing ToA class
-    ORB_SLAM3::ToA test;
-    cout<<"just for debugging"<<test.GetBsId()<<endl;
 
     if(argc < 5)
     {
@@ -47,11 +48,12 @@ int main(int argc, char *argv[])
     vector< vector<double> > vTimestampsCam;
     vector< vector<cv::Point3f> > vAcc, vGyro;
     vector< vector<double> > vTimestampsImu;
-    vector< vector< vector< double> > > vToa;
+    vector< vector< vector< double> > > vToaAll;
     vector< vector<double> > vTimestampsToa;
     vector<int> nImages;
     vector<int> nImu;
     vector<int> first_imu(num_seq,0);
+    vector<int> toaMeas_ind(num_seq,0);
 
     vstrImageFilenames.resize(num_seq);
     vTimestampsCam.resize(num_seq);
@@ -60,7 +62,7 @@ int main(int argc, char *argv[])
     vTimestampsImu.resize(num_seq);
     nImages.resize(num_seq);
     nImu.resize(num_seq);
-    vToa.resize(num_seq);
+    vToaAll.resize(num_seq);
     vTimestampsToa.resize(num_seq);
 
     int tot_images = 0;
@@ -85,7 +87,7 @@ int main(int argc, char *argv[])
 
         // TODO: Bs_num must be read from config file
         cout << "Loading toa for sequence " << seq << "...";
-        LoadTOA(pathToa, vTimestampsToa[seq], vToa[seq], 3);     
+        LoadTOA(pathToa, vTimestampsToa[seq], vToaAll[seq], 3);     
         cout << "LOADED!" << endl;
 
         nImages[seq] = vstrImageFilenames[seq].size();
@@ -105,6 +107,11 @@ int main(int argc, char *argv[])
         first_imu[seq]--; // first imu measurement to be considered
 
     }
+
+    //for Debugging:
+        //ORB_SLAM3::ToA obj(vTimestampsToa[0][0], vToa[0][0]);
+        //cout<<"This is the timestamp read  --- "<<obj.GetTimeStamp()<<endl;
+        //cout<<"this is another message  -- "<<obj.GetStatus()<<endl;
 
 
       // Vector for tracking time statistics
@@ -185,6 +192,17 @@ int main(int argc, char *argv[])
                 }
             }
 
+                        if(ni>0)
+            {
+                // cout << "t_cam " << tframe << endl;
+
+                while(vTimestampsToa[seq][toaMeas_ind[seq]]<=vTimestampsCam[seq][ni])
+                {
+                    vector<double> vToa = vToaAll[seq][toaMeas_ind[seq]];
+                    toaMeas_ind[seq]++;
+                }
+            }
+
     #ifdef COMPILEDWITHC11
             std::chrono::steady_clock::time_point t1 = std::chrono::steady_clock::now();
     #else
@@ -193,7 +211,7 @@ int main(int argc, char *argv[])
 
             // Pass the image to the SLAM system
             // cout << "tframe = " << tframe << endl;
-            SLAM.TrackMonocularToa(im,tframe, vToa[seq], vImuMeas); // TODO change to monocular_inertial
+            SLAM.TrackMonocularToa(im,tframe, vToaAll[seq], vImuMeas); // TODO change to monocular_inertial
 
     #ifdef COMPILEDWITHC11
             std::chrono::steady_clock::time_point t2 = std::chrono::steady_clock::now();
@@ -250,15 +268,6 @@ int main(int argc, char *argv[])
     return 0;
 
 
-
-    //debuggin printing the toa read value
-  // cout << "this si the size of the myvector" << vToa.size() << endl;
-  //cout << sizeof(vToa);
-  //for (int i = 0; i < vToa[0].size(); i++) {
-  //  for (int j = 0; j < vToa[0][i].size(); j++) {
-  //    cout << vToa[0][i][j] << " ";
-  //  }
-  //}
 
 
 
