@@ -3,22 +3,22 @@
 namespace ORB_SLAM3
 {
 
-ToA::ToA(const double TimeStamp , const double toaMeas ,const std::vector<double> BsPosition , const int BsId  , const ToA::eStatus status):
-  ToaValue_(toaMeas), BsPosition_(BsPosition), TimeStamp_(TimeStamp), BsId_(BsId),status_(status)
+  //ToA::ToA() : status_(NoMeasAdded) {}
+  ToA::ToA(const double TimeStamp, const std::vector<double> toaMeas , const ToA::eStatus status):
+  TimeStamp_(TimeStamp), ToaMeas_(toaMeas), status_(status)
 {
   
 }
 
-void ToA::SetBsPosition(std::vector<double> BsPosition) {
-  BsPosition_ = BsPosition;
-}
-double ToA::GetTimeStamp(){return TimeStamp_;}
-double ToA::GetToa() { return ToaValue_; }
-int ToA::GetBsId () {return BsId_;}
-std::vector<double> ToA::GetBsPosition() { return BsPosition_; }
-void ToA::SetToA(double toaMeas) {ToaValue_ = toaMeas; }
+//Set params 
 void ToA::SetTimeStamp(double TimeStamp) {TimeStamp_ = TimeStamp;}
-void ToA::SetBsId (int BsId) {BsId_ = BsId;}
+void ToA::SetToAMeas(std::vector<double> toaMeas) {ToaMeas_ = toaMeas; }
+void ToA::SetBsPositions(std::vector<std::vector<double>> BsPositions) { BsPositions_ = BsPositions;}
 
+//Get Params
+double ToA::GetTimeStamp(){return TimeStamp_;}
+ToA::eStatus ToA::GetStatus(){return status_;}
+std::vector<double> ToA::GetToaMeas() { return ToaMeas_; }
+std::vector<std::vector<double>> ToA::GetBsPositions() { return BsPositions_; }
 
 }
