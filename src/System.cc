@@ -474,7 +474,7 @@ Sophus::SE3f System::TrackMonocular(const cv::Mat &im, const double &timestamp, 
 }
 
 //////////////////////////////TrackMonocularToa/////////////////////////////////
-Sophus::SE3f System::TrackMonocularToa(const cv::Mat &im, const double &timestamp, const vector<vector<double>>& vToa, const vector<IMU::Point>& vImuMeas, string filename)
+Sophus::SE3f System::TrackMonocularToa(const cv::Mat &im, const double &timestamp, const vector<double>& vToa, const vector<IMU::Point>& vImuMeas, string filename)
 //TODO: instead of vector to pass to vTOA a toa object must be passed
 //ToDO: the name must be changed -- the msensor IMU-MonoCULAr_TOA must be added modifed and added into the track module.
 {
@@ -542,6 +542,9 @@ Sophus::SE3f System::TrackMonocularToa(const cv::Mat &im, const double &timestam
     //if (mSensor == System::IMU_MONOCULAR) This is no longer needed as here just intertia monocoular with toa is called.
         for(size_t i_imu = 0; i_imu < vImuMeas.size(); i_imu++)
             mpTracker->GrabImuData(vImuMeas[i_imu]);
+
+    //if (mSensor == System::IMU_MONOCULAR)
+    //mpTracker->GrabToAData(vToa);         
 
     Sophus::SE3f Tcw = mpTracker->GrabImageMonocular(imToFeed,timestamp,filename);
 

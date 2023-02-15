@@ -3,7 +3,7 @@
 namespace ORB_SLAM3
 {
 
-  //ToA::ToA() : status_(NoMeasAdded) {}
+  ToA::ToA() : status_(NoMeasAdded) {}
   ToA::ToA(const double TimeStamp, const std::vector<double> toaMeas , const ToA::eStatus status):
   TimeStamp_(TimeStamp), ToaMeas_(toaMeas), status_(status)
 {

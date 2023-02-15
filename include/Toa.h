@@ -21,7 +21,7 @@ private:
 
 public:
   // Constructor
-  //ToA();
+  ToA();
   ToA(const double TimeStamp, const std::vector<double> toaMeas , const eStatus status = AddedMeas);
 
   //Set params

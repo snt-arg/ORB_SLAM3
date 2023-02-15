@@ -195,7 +195,7 @@ public:
 protected:
 
     // Main tracking function. It is independent of the input sensor.
-    void Track();
+    void Track(const vector<double>& vToa = vector<double>(1,0));
 
     // Map initialization for stereo and RGB-D
     void StereoInitialization();
@@ -221,7 +221,7 @@ protected:
     void SearchLocalPoints();
 
     bool NeedNewKeyFrame();
-    void CreateNewKeyFrame();
+    void CreateNewKeyFrame(const vector<double>& vToa = vector<double>(1,0));
 
     // Perform preintegration from last frame
     void PreintegrateIMU();

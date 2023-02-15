@@ -3,7 +3,9 @@
         "ostream": "cpp",
         "iostream": "cpp",
         "string": "cpp",
-        "string_view": "cpp"
+        "string_view": "cpp",
+        "chrono": "cpp",
+        "thread": "cpp"
     },
     "cmake.configureOnOpen": true
 }

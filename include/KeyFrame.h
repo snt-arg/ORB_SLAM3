@@ -37,6 +37,7 @@
 #include <boost/serialization/base_object.hpp>
 #include <boost/serialization/vector.hpp>
 #include <boost/serialization/map.hpp>
+#include <Toa.h>
 
 
 namespace ORB_SLAM3
@@ -195,7 +196,7 @@ class KeyFrame
 public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
     KeyFrame();
-    KeyFrame(Frame &F, Map* pMap, KeyFrameDatabase* pKFDB);
+    KeyFrame(Frame &F, Map* pMap, KeyFrameDatabase* pKFDB, const vector<double>& vToa = vector<double>(1,0));
 
     // Pose functions
     void SetPose(const Sophus::SE3f &Tcw);
@@ -420,6 +421,10 @@ public:
 
     std::vector <KeyFrame*> mvpLoopCandKFs;
     std::vector <KeyFrame*> mvpMergeCandKFs;
+
+    //TOA Measurements
+    //ToA toaObs_;
+    vector<double> vToa_;
 
     //bool mbHasHessian;
     //cv::Mat mHessianPose;

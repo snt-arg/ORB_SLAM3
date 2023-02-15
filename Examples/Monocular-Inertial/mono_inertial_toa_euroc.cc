@@ -196,12 +196,15 @@ int main(int argc, char *argv[])
             {
                 // cout << "t_cam " << tframe << endl;
 
-                while(vTimestampsToa[seq][toaMeas_ind[seq]]<=vTimestampsCam[seq][ni])
+                while(vTimestampsToa[seq][toaMeas_ind[seq]+1]<=vTimestampsCam[seq][ni])
                 {
-                    vector<double> vToa = vToaAll[seq][toaMeas_ind[seq]];
                     toaMeas_ind[seq]++;
                 }
             }
+
+        //for debugging
+        std::cout << "Type of vector v is: " << typeid(vToaAll[seq][toaMeas_ind[seq]]).name() << std::endl;
+        std::cout << "Size of vector v is: " << vToaAll[seq][toaMeas_ind[seq]].size() << std::endl;
 
     #ifdef COMPILEDWITHC11
             std::chrono::steady_clock::time_point t1 = std::chrono::steady_clock::now();
@@ -211,7 +214,7 @@ int main(int argc, char *argv[])
 
             // Pass the image to the SLAM system
             // cout << "tframe = " << tframe << endl;
-            SLAM.TrackMonocularToa(im,tframe, vToaAll[seq], vImuMeas); // TODO change to monocular_inertial
+            SLAM.TrackMonocularToa(im,tframe, vToaAll[seq][toaMeas_ind[seq]], vImuMeas); // TODO change to monocular_inertial
 
     #ifdef COMPILEDWITHC11
             std::chrono::steady_clock::time_point t2 = std::chrono::steady_clock::now();
