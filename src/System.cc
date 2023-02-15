@@ -473,6 +473,90 @@ Sophus::SE3f System::TrackMonocular(const cv::Mat &im, const double &timestamp, 
     return Tcw;
 }
 
+//////////////////////////////TrackMonocularToa/////////////////////////////////
+Sophus::SE3f System::TrackMonocularToa(const cv::Mat &im, const double &timestamp, const vector<vector<double>>& vToa, const vector<IMU::Point>& vImuMeas, string filename)
+//TODO: instead of vector to pass to vTOA a toa object must be passed
+//ToDO: the name must be changed -- the msensor IMU-MonoCULAr_TOA must be added modifed and added into the track module.
+{
+
+   {
+        unique_lock<mutex> lock(mMutexReset);
+        if(mbShutDown)
+            return Sophus::SE3f();
+    }
+
+    if( mSensor!=MONOCULAR && mSensor!=IMU_MONOCULAR && mSensor!=IMU_MONOCULAR_TOA) //TODO this need to be modified
+    {
+        cerr << "ERROR: you called TrackMonocularToa but input sensor was not set to TrackMonocularTOA." << endl;
+        exit(-1);
+    }
+
+    cv::Mat imToFeed = im.clone();
+    if(settings_ && settings_->needToResize()){
+        cv::Mat resizedIm;
+        cv::resize(im,resizedIm,settings_->newImSize());
+        imToFeed = resizedIm;
+    }
+
+    // Check mode change
+    {
+        unique_lock<mutex> lock(mMutexMode);
+        if(mbActivateLocalizationMode)
+        {
+            mpLocalMapper->RequestStop();
+
+            // Wait until Local Mapping has effectively stopped
+            while(!mpLocalMapper->isStopped())
+            {
+                usleep(1000);
+            }
+
+            mpTracker->InformOnlyTracking(true);
+            mbActivateLocalizationMode = false;
+        }
+        if(mbDeactivateLocalizationMode)
+        {
+            mpTracker->InformOnlyTracking(false);
+            mpLocalMapper->Release();
+            mbDeactivateLocalizationMode = false;
+        }
+    }
+
+    // Check reset
+    {
+        unique_lock<mutex> lock(mMutexReset);
+        if(mbReset)
+        {
+            mpTracker->Reset();
+            mbReset = false;
+            mbResetActiveMap = false;
+        }
+        else if(mbResetActiveMap)
+        {
+            cout << "SYSTEM-> Reseting active map in monocular case" << endl;
+            mpTracker->ResetActiveMap();
+            mbResetActiveMap = false;
+        }
+    }
+
+    //if (mSensor == System::IMU_MONOCULAR) This is no longer needed as here just intertia monocoular with toa is called.
+        for(size_t i_imu = 0; i_imu < vImuMeas.size(); i_imu++)
+            mpTracker->GrabImuData(vImuMeas[i_imu]);
+
+    Sophus::SE3f Tcw = mpTracker->GrabImageMonocular(imToFeed,timestamp,filename);
+
+    unique_lock<mutex> lock2(mMutexState);
+    mTrackingState = mpTracker->mState;
+    mTrackedMapPoints = mpTracker->mCurrentFrame.mvpMapPoints;
+    mTrackedKeyPointsUn = mpTracker->mCurrentFrame.mvKeysUn;
+
+    return Tcw;
+}
+
+
+///////////////////////////////
+
+
 
 
 void System::ActivateLocalizationMode()

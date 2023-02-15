@@ -54,6 +54,7 @@ ${Pangolin_INCLUDE_DIRS}
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/lib)
 
 add_library(${PROJECT_NAME} SHARED
+src/Toa.cc
 src/System.cc
 src/Tracking.cc
 src/LocalMapping.cc
@@ -83,6 +84,7 @@ src/TwoViewReconstruction.cc
 src/Config.cc
 src/Settings.cc
 include/System.h
+include/Toa.h
 include/Tracking.h
 include/LocalMapping.h
 include/LoopClosing.h

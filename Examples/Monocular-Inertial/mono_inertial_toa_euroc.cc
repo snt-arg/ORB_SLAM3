@@ -8,6 +8,7 @@
 #include<opencv2/core/core.hpp>
 
 #include<System.h>
+#include<Toa.h>
 #include "ImuTypes.h"
 
 void LoadImages(const string &strImagePath, const string &strPathTimes,
@@ -17,9 +18,12 @@ void LoadIMU(const string &strImuPath, vector<double> &vTimeStamps, vector<cv::P
 
 void LoadTOA(const string strToaPath, vector<double> &vTimeStamps,  vector<vector<double>> &vToa,  int Bs_num) ;
 
-
+double ttrack_tot = 0;
 int main(int argc, char *argv[])
 {
+    //testing ToA class
+    ORB_SLAM3::ToA test;
+    cout<<"just for debugging"<<test.GetBsId()<<endl;
 
     if(argc < 5)
     {
@@ -44,6 +48,7 @@ int main(int argc, char *argv[])
     vector< vector<cv::Point3f> > vAcc, vGyro;
     vector< vector<double> > vTimestampsImu;
     vector< vector< vector< double> > > vToa;
+    vector< vector<double> > vTimestampsToa;
     vector<int> nImages;
     vector<int> nImu;
     vector<int> first_imu(num_seq,0);
@@ -56,6 +61,7 @@ int main(int argc, char *argv[])
     nImages.resize(num_seq);
     nImu.resize(num_seq);
     vToa.resize(num_seq);
+    vTimestampsToa.resize(num_seq);
 
     int tot_images = 0;
 
@@ -79,7 +85,7 @@ int main(int argc, char *argv[])
 
         // TODO: Bs_num must be read from config file
         cout << "Loading toa for sequence " << seq << "...";
-        LoadTOA(pathToa, vTimestampsImu[seq], vToa[seq], 3);     
+        LoadTOA(pathToa, vTimestampsToa[seq], vToa[seq], 3);     
         cout << "LOADED!" << endl;
 
         nImages[seq] = vstrImageFilenames[seq].size();
@@ -99,6 +105,149 @@ int main(int argc, char *argv[])
         first_imu[seq]--; // first imu measurement to be considered
 
     }
+
+
+      // Vector for tracking time statistics
+    vector<float> vTimesTrack;
+    vTimesTrack.resize(tot_images);
+
+    cout.precision(17);
+
+    // Create SLAM system. It initializes all system threads and gets ready to process frames.
+    ORB_SLAM3::System SLAM(argv[1],argv[2],ORB_SLAM3::System::IMU_MONOCULAR, true); 
+    //TODO the sensor must be changed to IMU_MONOCULAR_TOA
+    float imageScale = SLAM.GetImageScale();
+
+    double t_resize = 0.f;
+    double t_track = 0.f;
+
+    int proccIm=0;  
+
+
+
+     for (seq = 0; seq<num_seq; seq++)
+    {
+
+        // Main loop
+        cv::Mat im;
+        vector<ORB_SLAM3::IMU::Point> vImuMeas;
+        proccIm = 0;
+        for(int ni=0; ni<nImages[seq]; ni++, proccIm++)
+        {
+            // Read image from file
+            im = cv::imread(vstrImageFilenames[seq][ni],cv::IMREAD_UNCHANGED); //CV_LOAD_IMAGE_UNCHANGED);
+
+            double tframe = vTimestampsCam[seq][ni];
+
+            if(im.empty())
+            {
+                cerr << endl << "Failed to load image at: "
+                     <<  vstrImageFilenames[seq][ni] << endl;
+                return 1;
+            }
+
+            if(imageScale != 1.f)
+            {
+#ifdef REGISTER_TIMES
+    #ifdef COMPILEDWITHC11
+                std::chrono::steady_clock::time_point t_Start_Resize = std::chrono::steady_clock::now();
+    #else
+                std::chrono::monotonic_clock::time_point t_Start_Resize = std::chrono::monotonic_clock::now();
+    #endif
+#endif
+                int width = im.cols * imageScale;
+                int height = im.rows * imageScale;
+                cv::resize(im, im, cv::Size(width, height));
+#ifdef REGISTER_TIMES
+    #ifdef COMPILEDWITHC11
+                std::chrono::steady_clock::time_point t_End_Resize = std::chrono::steady_clock::now();
+    #else
+                std::chrono::monotonic_clock::time_point t_End_Resize = std::chrono::monotonic_clock::now();
+    #endif
+                t_resize = std::chrono::duration_cast<std::chrono::duration<double,std::milli> >(t_End_Resize - t_Start_Resize).count();
+                SLAM.InsertResizeTime(t_resize);
+#endif
+            }
+
+            // Load imu measurements from previous frame
+            vImuMeas.clear();
+
+            if(ni>0)
+            {
+                // cout << "t_cam " << tframe << endl;
+
+                while(vTimestampsImu[seq][first_imu[seq]]<=vTimestampsCam[seq][ni])
+                {
+                    vImuMeas.push_back(ORB_SLAM3::IMU::Point(vAcc[seq][first_imu[seq]].x,vAcc[seq][first_imu[seq]].y,vAcc[seq][first_imu[seq]].z,
+                                                             vGyro[seq][first_imu[seq]].x,vGyro[seq][first_imu[seq]].y,vGyro[seq][first_imu[seq]].z,
+                                                             vTimestampsImu[seq][first_imu[seq]]));
+                    first_imu[seq]++;
+                }
+            }
+
+    #ifdef COMPILEDWITHC11
+            std::chrono::steady_clock::time_point t1 = std::chrono::steady_clock::now();
+    #else
+            std::chrono::monotonic_clock::time_point t1 = std::chrono::monotonic_clock::now();
+    #endif
+
+            // Pass the image to the SLAM system
+            // cout << "tframe = " << tframe << endl;
+            SLAM.TrackMonocularToa(im,tframe, vToa[seq], vImuMeas); // TODO change to monocular_inertial
+
+    #ifdef COMPILEDWITHC11
+            std::chrono::steady_clock::time_point t2 = std::chrono::steady_clock::now();
+    #else
+            std::chrono::monotonic_clock::time_point t2 = std::chrono::monotonic_clock::now();
+    #endif
+
+#ifdef REGISTER_TIMES
+            t_track = t_resize + std::chrono::duration_cast<std::chrono::duration<double,std::milli> >(t2 - t1).count();
+            SLAM.InsertTrackTime(t_track);
+#endif
+
+            double ttrack= std::chrono::duration_cast<std::chrono::duration<double> >(t2 - t1).count();
+            ttrack_tot += ttrack;
+            // std::cout << "ttrack: " << ttrack << std::endl;
+
+            vTimesTrack[ni]=ttrack;
+
+            // Wait to load the next frame
+            double T=0;
+            if(ni<nImages[seq]-1)
+                T = vTimestampsCam[seq][ni+1]-tframe;
+            else if(ni>0)
+                T = tframe-vTimestampsCam[seq][ni-1];
+
+            if(ttrack<T)
+                usleep((T-ttrack)*1e6); // 1e6
+        }
+        if(seq < num_seq - 1)
+        {
+            cout << "Changing the dataset" << endl;
+
+            SLAM.ChangeDataset();
+        }
+    }
+
+    // Stop all threads
+    SLAM.Shutdown();
+
+    // Save camera trajectory
+    if (bFileName)
+    {
+        const string kf_file =  "kf_" + string(argv[argc-1]) + ".txt";
+        const string f_file =  "f_" + string(argv[argc-1]) + ".txt";
+        SLAM.SaveTrajectoryEuRoC(f_file);
+        SLAM.SaveKeyFrameTrajectoryEuRoC(kf_file);
+    }
+    else
+    {
+        SLAM.SaveTrajectoryEuRoC("CameraTrajectory.txt");
+        SLAM.SaveKeyFrameTrajectoryEuRoC("KeyFrameTrajectory.txt");
+    }
+
+    return 0;
 
 
 
