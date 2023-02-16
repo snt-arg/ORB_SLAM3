@@ -69,9 +69,9 @@ public:
     bool ParseIMUParamFile(cv::FileStorage &fSettings);
 
     // Preprocess the input and call Track(). Extract features and performs stereo matching.
-    Sophus::SE3f GrabImageStereo(const cv::Mat &imRectLeft,const cv::Mat &imRectRight, const double &timestamp, string filename);
-    Sophus::SE3f GrabImageRGBD(const cv::Mat &imRGB,const cv::Mat &imD, const double &timestamp, string filename);
-    Sophus::SE3f GrabImageMonocular(const cv::Mat &im, const double &timestamp, string filename);
+    Sophus::SE3f GrabImageStereo(const cv::Mat &imRectLeft,const cv::Mat &imRectRight, const double &timestamp, string filename, const vector<double>& vToa = vector<double>(1,0) );
+    Sophus::SE3f GrabImageRGBD(const cv::Mat &imRGB,const cv::Mat &imD, const double &timestamp, string filename, const vector<double>& vToa = vector<double>(1,0) );
+    Sophus::SE3f GrabImageMonocular(const cv::Mat &im, const double &timestamp, string filename,const vector<double>& vToa = vector<double>(1,0));
 
     void GrabImuData(const IMU::Point &imuMeasurement);
 
@@ -195,7 +195,7 @@ public:
 protected:
 
     // Main tracking function. It is independent of the input sensor.
-    void Track(const vector<double>& vToa = vector<double>(1,0));
+    void Track();
 
     // Map initialization for stereo and RGB-D
     void StereoInitialization();
@@ -221,7 +221,7 @@ protected:
     void SearchLocalPoints();
 
     bool NeedNewKeyFrame();
-    void CreateNewKeyFrame(const vector<double>& vToa = vector<double>(1,0));
+    void CreateNewKeyFrame();
 
     // Perform preintegration from last frame
     void PreintegrateIMU();

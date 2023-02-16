@@ -121,7 +121,8 @@ int main(int argc, char *argv[])
     cout.precision(17);
 
     // Create SLAM system. It initializes all system threads and gets ready to process frames.
-    ORB_SLAM3::System SLAM(argv[1],argv[2],ORB_SLAM3::System::IMU_MONOCULAR, true); 
+    //ORB_SLAM3::System SLAM(argv[1],argv[2],ORB_SLAM3::System::IMU_MONOCULAR, true); 
+    ORB_SLAM3::System SLAM(argv[1],argv[2],ORB_SLAM3::System::MONOCULAR, true); 
     //TODO the sensor must be changed to IMU_MONOCULAR_TOA
     float imageScale = SLAM.GetImageScale();
 
@@ -183,7 +184,7 @@ int main(int argc, char *argv[])
             {
                 // cout << "t_cam " << tframe << endl;
 
-                while(vTimestampsImu[seq][first_imu[seq]]<=vTimestampsCam[seq][ni])
+                while(vTimestampsImu[seq][first_imu[seq]]<=vTimestampsCam[seq][ni])//tframe
                 {
                     vImuMeas.push_back(ORB_SLAM3::IMU::Point(vAcc[seq][first_imu[seq]].x,vAcc[seq][first_imu[seq]].y,vAcc[seq][first_imu[seq]].z,
                                                              vGyro[seq][first_imu[seq]].x,vGyro[seq][first_imu[seq]].y,vGyro[seq][first_imu[seq]].z,
@@ -195,11 +196,24 @@ int main(int argc, char *argv[])
                         if(ni>0)
             {
                 // cout << "t_cam " << tframe << endl;
+            /*
 
-                while(vTimestampsToa[seq][toaMeas_ind[seq]+1]<=vTimestampsCam[seq][ni])
+                        while(!(vTimestampsToa[seq][toaMeas_ind[seq]]<=tframe && tframe<=vTimestampsToa[seq][toaMeas_ind[seq]+1]))
+            {
+                toaMeas_ind[seq]++;
+            }
+
+            if ((vTimestampsToa[seq][toaMeas_ind[seq]+1]-tframe)<(tframe-vTimestampsToa[seq][toaMeas_ind[seq]]))
+            {
+                toaMeas_ind[seq]++;
+            }
+
+            */
+                while(vTimestampsToa[seq][toaMeas_ind[seq]+1]<=tframe )
                 {
                     toaMeas_ind[seq]++;
                 }
+                if (vTimestampsToa[seq][toaMeas_ind[seq]+1] - tframe < tframe - vTimestampsToa[seq][toaMeas_ind[seq]]) {toaMeas_ind[seq]++;}
             }
 
         //for debugging
@@ -214,7 +228,11 @@ int main(int argc, char *argv[])
 
             // Pass the image to the SLAM system
             // cout << "tframe = " << tframe << endl;
+             if (abs(tframe - vTimestampsToa[seq][toaMeas_ind[seq]])*1e-9 < 20*1e20*0.5 ){
             SLAM.TrackMonocularToa(im,tframe, vToaAll[seq][toaMeas_ind[seq]], vImuMeas); // TODO change to monocular_inertial
+            }else{
+                 SLAM.TrackMonocularToa(im,tframe, vector<double>(1,0), vImuMeas);
+            }
 
     #ifdef COMPILEDWITHC11
             std::chrono::steady_clock::time_point t2 = std::chrono::steady_clock::now();

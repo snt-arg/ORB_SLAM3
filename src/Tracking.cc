@@ -1451,7 +1451,7 @@ bool Tracking::GetStepByStep()
 
 
 
-Sophus::SE3f Tracking::GrabImageStereo(const cv::Mat &imRectLeft, const cv::Mat &imRectRight, const double &timestamp, string filename)
+Sophus::SE3f Tracking::GrabImageStereo(const cv::Mat &imRectLeft, const cv::Mat &imRectRight, const double &timestamp, string filename, const vector<double>& vToa)
 {
     //cout << "GrabImageStereo" << endl;
 
@@ -1489,15 +1489,15 @@ Sophus::SE3f Tracking::GrabImageStereo(const cv::Mat &imRectLeft, const cv::Mat 
     }
 
     //cout << "Incoming frame creation" << endl;
-
+//The defulat values manually is added need to be extra care if its true or not
     if (mSensor == System::STEREO && !mpCamera2)
-        mCurrentFrame = Frame(mImGray,imGrayRight,timestamp,mpORBextractorLeft,mpORBextractorRight,mpORBVocabulary,mK,mDistCoef,mbf,mThDepth,mpCamera);
+        mCurrentFrame = Frame(mImGray,imGrayRight,timestamp,mpORBextractorLeft,mpORBextractorRight,mpORBVocabulary,mK,mDistCoef,mbf,mThDepth,mpCamera,(ORB_SLAM3::Frame *)__null, ORB_SLAM3::IMU::Calib(), vToa);
     else if(mSensor == System::STEREO && mpCamera2)
-        mCurrentFrame = Frame(mImGray,imGrayRight,timestamp,mpORBextractorLeft,mpORBextractorRight,mpORBVocabulary,mK,mDistCoef,mbf,mThDepth,mpCamera,mpCamera2,mTlr);
+        mCurrentFrame = Frame(mImGray,imGrayRight,timestamp,mpORBextractorLeft,mpORBextractorRight,mpORBVocabulary,mK,mDistCoef,mbf,mThDepth,mpCamera,mpCamera2,mTlr, (ORB_SLAM3::Frame *)__null, ORB_SLAM3::IMU::Calib(), vToa);
     else if(mSensor == System::IMU_STEREO && !mpCamera2)
-        mCurrentFrame = Frame(mImGray,imGrayRight,timestamp,mpORBextractorLeft,mpORBextractorRight,mpORBVocabulary,mK,mDistCoef,mbf,mThDepth,mpCamera,&mLastFrame,*mpImuCalib);
+        mCurrentFrame = Frame(mImGray,imGrayRight,timestamp,mpORBextractorLeft,mpORBextractorRight,mpORBVocabulary,mK,mDistCoef,mbf,mThDepth,mpCamera,&mLastFrame,*mpImuCalib, vToa);
     else if(mSensor == System::IMU_STEREO && mpCamera2)
-        mCurrentFrame = Frame(mImGray,imGrayRight,timestamp,mpORBextractorLeft,mpORBextractorRight,mpORBVocabulary,mK,mDistCoef,mbf,mThDepth,mpCamera,mpCamera2,mTlr,&mLastFrame,*mpImuCalib);
+        mCurrentFrame = Frame(mImGray,imGrayRight,timestamp,mpORBextractorLeft,mpORBextractorRight,mpORBVocabulary,mK,mDistCoef,mbf,mThDepth,mpCamera,mpCamera2,mTlr,&mLastFrame,*mpImuCalib, vToa);
 
     //cout << "Incoming frame ended" << endl;
 
@@ -1517,7 +1517,7 @@ Sophus::SE3f Tracking::GrabImageStereo(const cv::Mat &imRectLeft, const cv::Mat 
 }
 
 
-Sophus::SE3f Tracking::GrabImageRGBD(const cv::Mat &imRGB,const cv::Mat &imD, const double &timestamp, string filename)
+Sophus::SE3f Tracking::GrabImageRGBD(const cv::Mat &imRGB,const cv::Mat &imD, const double &timestamp, string filename, const vector<double>& vToa)
 {
     mImGray = imRGB;
     cv::Mat imDepth = imD;
@@ -1563,7 +1563,7 @@ Sophus::SE3f Tracking::GrabImageRGBD(const cv::Mat &imRGB,const cv::Mat &imD, co
 }
 
 
-Sophus::SE3f Tracking::GrabImageMonocular(const cv::Mat &im, const double &timestamp, string filename)
+Sophus::SE3f Tracking::GrabImageMonocular(const cv::Mat &im, const double &timestamp, string filename, const vector<double>& vToa)
 {
     mImGray = im;
     if(mImGray.channels()==3)
@@ -1584,18 +1584,18 @@ Sophus::SE3f Tracking::GrabImageMonocular(const cv::Mat &im, const double &times
     if (mSensor == System::MONOCULAR)
     {
         if(mState==NOT_INITIALIZED || mState==NO_IMAGES_YET ||(lastID - initID) < mMaxFrames)
-            mCurrentFrame = Frame(mImGray,timestamp,mpIniORBextractor,mpORBVocabulary,mpCamera,mDistCoef,mbf,mThDepth);
+            mCurrentFrame = Frame(mImGray,timestamp,mpIniORBextractor,mpORBVocabulary,mpCamera,mDistCoef,mbf,mThDepth,(ORB_SLAM3::Frame *)__null, ORB_SLAM3::IMU::Calib(), vToa);
         else
-            mCurrentFrame = Frame(mImGray,timestamp,mpORBextractorLeft,mpORBVocabulary,mpCamera,mDistCoef,mbf,mThDepth);
+            mCurrentFrame = Frame(mImGray,timestamp,mpORBextractorLeft,mpORBVocabulary,mpCamera,mDistCoef,mbf,mThDepth, (ORB_SLAM3::Frame *)__null, ORB_SLAM3::IMU::Calib(), vToa);
     }
     else if(mSensor == System::IMU_MONOCULAR)
     {
         if(mState==NOT_INITIALIZED || mState==NO_IMAGES_YET)
         {
-            mCurrentFrame = Frame(mImGray,timestamp,mpIniORBextractor,mpORBVocabulary,mpCamera,mDistCoef,mbf,mThDepth,&mLastFrame,*mpImuCalib);
+            mCurrentFrame = Frame(mImGray,timestamp,mpIniORBextractor,mpORBVocabulary,mpCamera,mDistCoef,mbf,mThDepth,&mLastFrame,*mpImuCalib, vToa);
         }
         else
-            mCurrentFrame = Frame(mImGray,timestamp,mpORBextractorLeft,mpORBVocabulary,mpCamera,mDistCoef,mbf,mThDepth,&mLastFrame,*mpImuCalib);
+            mCurrentFrame = Frame(mImGray,timestamp,mpORBextractorLeft,mpORBVocabulary,mpCamera,mDistCoef,mbf,mThDepth,&mLastFrame,*mpImuCalib, vToa);
     }
 
     if (mState==NO_IMAGES_YET)
@@ -1790,7 +1790,7 @@ void Tracking::ResetFrameIMU()
     // TODO To implement...
 }
 
-void Tracking::Track(const vector<double>& vToa)
+void Tracking::Track()
 {
 
     if (bStepByStep)
@@ -2246,7 +2246,7 @@ void Tracking::Track(const vector<double>& vToa)
             // if(bNeedKF && bOK)
             if(bNeedKF && (bOK || (mInsertKFsLost && mState==RECENTLY_LOST &&
                                    (mSensor == System::IMU_MONOCULAR || mSensor == System::IMU_STEREO || mSensor == System::IMU_RGBD))))
-                CreateNewKeyFrame(vToa);
+                CreateNewKeyFrame();
 
 #ifdef REGISTER_TIMES
             std::chrono::steady_clock::time_point time_EndNewKF = std::chrono::steady_clock::now();
@@ -3212,7 +3212,7 @@ bool Tracking::NeedNewKeyFrame()
         return false;
 }
 
-void Tracking::CreateNewKeyFrame(const vector<double>& vToa) 
+void Tracking::CreateNewKeyFrame() 
 
 {
     if(mpLocalMapper->IsInitializing() && !mpAtlas->isImuInitialized())
@@ -3222,7 +3222,7 @@ void Tracking::CreateNewKeyFrame(const vector<double>& vToa)
         return;
 
     
-    KeyFrame* pKF = new KeyFrame(mCurrentFrame,mpAtlas->GetCurrentMap(),mpKeyFrameDB, vToa);
+    KeyFrame* pKF = new KeyFrame(mCurrentFrame,mpAtlas->GetCurrentMap(),mpKeyFrameDB);
   
     cout<<"%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%"<<endl;
     cout<<"This is just for debugging in tracking.cc"<<endl;

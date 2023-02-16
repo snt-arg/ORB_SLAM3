@@ -539,14 +539,14 @@ Sophus::SE3f System::TrackMonocularToa(const cv::Mat &im, const double &timestam
         }
     }
 
-    //if (mSensor == System::IMU_MONOCULAR) This is no longer needed as here just intertia monocoular with toa is called.
+    if (mSensor == System::IMU_MONOCULAR) //This is no longer needed as here just intertia monocoular with toa is called.
         for(size_t i_imu = 0; i_imu < vImuMeas.size(); i_imu++)
             mpTracker->GrabImuData(vImuMeas[i_imu]);
 
     //if (mSensor == System::IMU_MONOCULAR)
     //mpTracker->GrabToAData(vToa);         
 
-    Sophus::SE3f Tcw = mpTracker->GrabImageMonocular(imToFeed,timestamp,filename);
+    Sophus::SE3f Tcw = mpTracker->GrabImageMonocular(imToFeed,timestamp,filename, vToa);
 
     unique_lock<mutex> lock2(mMutexState);
     mTrackingState = mpTracker->mState;
