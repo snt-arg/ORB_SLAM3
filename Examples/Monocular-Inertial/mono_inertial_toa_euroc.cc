@@ -228,7 +228,8 @@ int main(int argc, char *argv[])
 
             // Pass the image to the SLAM system
             // cout << "tframe = " << tframe << endl;
-             if (abs(tframe - vTimestampsToa[seq][toaMeas_ind[seq]])*1e-9 < 20*1e20*0.5 ){
+             if (abs(tframe - vTimestampsToa[seq][toaMeas_ind[seq]]) < 0.1 ){
+                // cout<<"This is the time difference   "<< abs(tframe - vTimestampsToa[seq][toaMeas_ind[seq]]) <<endl;
             SLAM.TrackMonocularToa(im,tframe, vToaAll[seq][toaMeas_ind[seq]], vImuMeas); // TODO change to monocular_inertial
             }else{
                  SLAM.TrackMonocularToa(im,tframe, vector<double>(1,0), vImuMeas);
@@ -380,8 +381,10 @@ void LoadTOA(const string strToaPath, vector<double> &vTimeStamps,
       s.erase(0, pos + 1);
     }
     // copy(data.begin(), data.end(), ostream_iterator<int>(cout, " "));
+    //TODO-msm the time stamp in euroc is in 1e+18 but here they are using 1e-9 (Euroc time stamp is in nanosec here is sec)
     item = s.substr(0, pos);
     data[Bs_num] = stod(item);
+    data[0]*=1e-9;
     vTimeStamps.push_back(data[0]);
     vToa.push_back(data);
   }
