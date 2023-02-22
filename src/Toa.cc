@@ -11,14 +11,16 @@ namespace ORB_SLAM3
 }
 
 //Set params 
+ 
+
 void ToA::SetTimeStamp(double TimeStamp) {TimeStamp_ = TimeStamp;}
 void ToA::SetToAMeas(std::vector<double> toaMeas) {ToaMeas_ = toaMeas; }
-void ToA::SetBsPositions(std::vector<std::vector<double>> BsPositions) { BsPositions_ = BsPositions;}
+// void ToA::SetBsPositions(std::vector<std::vector<double>> BsPositions) { sBsPositions = BsPositions;}
 
 //Get Params
 double ToA::GetTimeStamp(){return TimeStamp_;}
 ToA::eStatus ToA::GetStatus(){return status_;}
 std::vector<double> ToA::GetToaMeas() { return ToaMeas_; }
-std::vector<std::vector<double>> ToA::GetBsPositions() { return BsPositions_; }
+// std::vector<std::vector<double>> ToA::GetBsPositions() { return BsPositions_; }
 
 }

@@ -22,6 +22,8 @@ void LoadIMU(const string &strImuPath, vector<double> &vTimeStamps, vector<cv::P
 
 void LoadTOA(const string strToaPath, vector<double> &vTimeStamps,  vector<vector<double>> &vToa,  int Bs_num) ;
 
+std::vector<std::vector<double>> ORB_SLAM3::ToA::sBsPositions = {{10, 15, 13}, {14, 17, 18}, {-10, 20, 7}};
+
 double ttrack_tot = 0;
 int main(int argc, char *argv[])
 {
@@ -41,6 +43,9 @@ int main(int argc, char *argv[])
         file_name = string(argv[argc-1]);
         cout << "file name: " << file_name << endl;
     }
+
+    // const vector<vector<double>> bs_positions = {{1, 20, 3}, {4, 50, 6}, {7, 80, 9}};
+     ORB_SLAM3::ToA::sBsPositions = {{1, 20, 3}, {4, 50, 6}, {7, 80, 9}};
 
     // Load all sequences:
     int seq;
@@ -386,6 +391,7 @@ void LoadTOA(const string strToaPath, vector<double> &vTimeStamps,
     data[Bs_num] = stod(item);
     data[0]*=1e-9;
     vTimeStamps.push_back(data[0]);
+    data.erase(data.begin());
     vToa.push_back(data);
   }
 }

@@ -42,8 +42,162 @@
 #include "OptimizableTypes.h"
 
 
+#include<Toa.h>
+// #include <Eigen/Core>
+// #include <Eigen/Geometry>
+// #include <g2o/types/slam3d/types_slam3d.h>
+
+
+
 namespace ORB_SLAM3
 {
+
+// ///////////////////////////////This is my own code: add toa factor////////////////////////
+//Toa factor without adding nodes for base stations, Unary factor
+class ToaEdgeUnary : public g2o::BaseUnaryEdge<1, double, g2o::VertexSE3Expmap>
+{
+public:
+  EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
+  ToaEdgeUnary() {}
+
+  bool read(std::istream& is) { return true; }
+  bool write(std::ostream& os) const { return os.good(); }
+
+  void computeError()
+  {
+    const g2o::VertexSE3Expmap* v = static_cast<const g2o::VertexSE3Expmap*>(_vertices[0]);
+    Eigen::Isometry3d T = v->estimate();
+    Eigen::Vector3d P = T * _landmark; // transform the landmark position to the node frame
+
+    double expectedD = (P - _nodePosition).norm();
+    _error[0] = expectedD - _measurement;
+  }
+
+  void setMeasurement(double m) { _measurement = m; }
+  double measurement() const { return _measurement; }
+
+  void setLandmarkPosition(const Eigen::Vector3d& landmark) { _landmark = landmark; }
+  void setNodePosition(const Eigen::Vector3d& nodePosition) { _nodePosition = nodePosition; }
+
+protected:
+  double _measurement;
+  Eigen::Vector3d _landmark;
+  Eigen::Vector3d _nodePosition;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Custom vertex for XYZ node
+//VertexPointXYZ is not found here so we define our own vertex type for Bs positions (landmark)
+//Toa factor with adding nodes for base stations, binary factor
+class VertexXYZ : public g2o::BaseVertex<3, g2o::Vector3d> {
+public:
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+    
+    virtual void setToOriginImpl() override {
+        _estimate.setZero();
+    }
+    
+    virtual void oplusImpl(const double* update) override {
+        _estimate[0] += update[0];
+        _estimate[1] += update[1];
+        _estimate[2] += update[2];
+    }
+    
+    virtual bool read(std::istream& is) override {
+        for (int i = 0; i < 3; ++i) {
+            is >> _estimate[i];
+        }
+        return true;
+    }
+    
+    virtual bool write(std::ostream& os) const override {
+        for (int i = 0; i < 3; ++i) {
+            os << _estimate[i] << " ";
+        }
+        return os.good();
+    }
+};
+
+
+// Custom edge for distance measurement between XYZ and SE3 nodes
+class EdgeDistance : public g2o::BaseBinaryEdge<1, double, VertexXYZ, g2o::VertexSE3Expmap> {
+public:
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
+    virtual void computeError() override {
+        VertexXYZ* v1 = static_cast<VertexXYZ*>(_vertices[0]);
+        g2o::VertexSE3Expmap* v2 = static_cast<g2o::VertexSE3Expmap*>(_vertices[1]);
+        Eigen::Vector3d p1 = v1->estimate();
+        g2o::SE3Quat T(v2->estimate());
+        Eigen::Vector3d p2 = T.map(Eigen::Vector3d(0, 0, 0));
+        _error[0] = (p1 - p2).norm() - _measurement;
+    }
+
+    // virtual bool read(std::istream& is) override {
+    //     is >> _measurement;
+    //     return g2o::BaseBinaryEdge<1, double, VertexXYZ, g2o::VertexSE3Expmap>::read(is);
+    // }
+
+    // virtual bool write(std::ostream& os) const override {
+    //     os << _measurement << " ";
+    //     return g2o::BaseBinaryEdge<1, double, VertexXYZ, g2o::VertexSE3Expmap>::write(os);
+    // }
+
+    // void setMeasurement(double m) { _measurement = m; }
+    // double measurement() const { return _measurement; }
+    virtual bool read(std::istream& is){return false;}
+    virtual bool write(std::ostream& os) const{return false;}
+};
+
+
+// ///////////////////////////////////////////////////////////////////////////////////////////
+////////////////////my own code/////////////////////////////////////////
+static void OptimizeToa(int frameID, std::vector<double> vToa,  g2o::SparseOptimizer& optimizer)
+{
+
+// This is for adding bs nodes with negative ID and binary edges
+    if (vToa == vector<double>(1,0) ){return;}
+    VertexXYZ* v_1 = dynamic_cast<VertexXYZ*>(optimizer.vertex(-1));
+    // std::cout << "Vertex ID: " << v_1->id() << std::endl;
+    // std::cout << "Vertex Estimate: " << v_1->estimate().matrix() << std::endl;
+    // if ( v_1 != nullptr )
+    // {
+        cout<<"v1 pointer in null";
+           int bs_counter = 0;
+           for (auto& bs : ToA::sBsPositions)
+           {
+               bs_counter--;
+               VertexXYZ* vBs = new VertexXYZ();
+               vBs->setEstimate(Eigen::Vector3d(bs[1], bs[2], bs[3]));
+               vBs->setId(bs_counter);
+               vBs ->setFixed(true);
+               optimizer.addVertex(vBs);
+            }
+    // }
+
+//These lines of code add edges between the BS and the current frame/keyframe
+int lm_id = 0;       
+for (auto& m : vToa) {
+    lm_id ++;
+    // g2o::VertexXYZ* e = new g2o::EdgeSE3XYZ();
+    EdgeDistance* e = new EdgeDistance();
+    e->setMeasurement(m); 
+    e->setInformation(Eigen::Matrix<double, 1, 1>::Identity());
+    e->setVertex(0,optimizer.vertex(-lm_id));
+    e->setVertex(1,optimizer.vertex(frameID));
+    e->setRobustKernel(new g2o::RobustKernelHuber());
+    optimizer.addEdge(e);
+    
+}
+};
+
+// /////////////////////////////////////////////////////////////////////////
+// ////////////////////my own code/////////////////////////////////////////
+
+// ///////////////////////////////////////////////////////////////////////////////////////////
+
+
 bool sortByVal(const pair<MapPoint*, int> &a, const pair<MapPoint*, int> &b)
 {
     return (a.second < b.second);
@@ -813,6 +967,7 @@ void Optimizer::FullInertialBA(Map *pMap, int its, const bool bFixLocal, const l
 
 int Optimizer::PoseOptimization(Frame *pFrame)
 {
+
     g2o::SparseOptimizer optimizer;
     g2o::BlockSolver_6_3::LinearSolverType * linearSolver;
 
@@ -854,6 +1009,64 @@ int Optimizer::PoseOptimization(Frame *pFrame)
 
     {
     unique_lock<mutex> lock(MapPoint::mGlobalMutex);
+
+
+
+////////////////////////////////////////////////////////////////////////
+OptimizeToa(0, pFrame->vToa_ , optimizer);
+// ////////////////////my own code/////////////////////////////////////////
+// // This is for adding bs nodes with negative ID and binary edges
+//     int bs_counter = 0;
+//     for (auto& bs : ToA::sBsPositions){
+//         bs_counter--;
+//         VertexXYZ* vBs = new VertexXYZ();
+//         vBs->setEstimate(Eigen::Vector3d(bs[1], bs[2], bs[3]));
+//         vBs->setId(bs_counter);
+//         vBs ->setFixed(true);
+//         optimizer.addVertex(vBs);
+//  }
+
+// //This optimization is performed over just one frame,
+// //so here we just add one edge from each BS to this frame
+//         int frame_id = 0;
+//         int lm_id = 0;
+        
+// for (auto& m : pFrame->vToa_) {
+//     lm_id ++;
+//     // g2o::VertexXYZ* e = new g2o::EdgeSE3XYZ();
+//     EdgeDistance* e = new EdgeDistance();
+//     e->setMeasurement(m); //The index 0  is time-stamps so we start with the second one
+//     e->setInformation(Eigen::Matrix<double, 1, 1>::Identity());
+//     e->setVertex(0,optimizer.vertex(-lm_id));
+//     e->setVertex(1,optimizer.vertex(0));
+//     optimizer.addEdge(e);
+
+//     // e->vertices(1[0] = dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(-lm_id));
+//     // e->vertices()[1] = dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(frame_id));
+    
+    
+// }
+
+// /////////////////////////////////////////////////////////////////////////
+// ////////////////////my own code/////////////////////////////////////////
+// // This is for adding unary edge with no node for BS
+// //This optimization is performed over just one frame,
+// //so here we just add one edge from each BS to this frame
+//         int frame_id = 0;
+//         int lm_id = 0;
+        
+// for (auto& m : pFrame->vToa_) {
+//     lm_id ++;
+//     ToaEdgeUnary* e = new ToaEdgeUnary();
+//     e->setMeasurement(m); //The index 0  is time-stamps so we start with the second one
+//     e->setInformation(Eigen::Matrix<double, 1, 1>::Identity());
+//     e->setVertex(0,optimizer.vertex(frame_id));
+//     optimizer.addEdge(e);   
+    
+// }
+
+/////////////////////////////////////////////////////////////////////////
+
 
     for(int i=0; i<N; i++)
     {
@@ -5587,4 +5800,9 @@ void Optimizer::OptimizeEssentialGraph4DoF(Map* pMap, KeyFrame* pLoopKF, KeyFram
     pMap->IncreaseChangeIndex();
 }
 
+
+
+
 } //namespace ORB_SLAM
+
+

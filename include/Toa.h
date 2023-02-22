@@ -12,12 +12,13 @@ class ToA {
 public:
   // Input sensor
   enum eStatus { NoMeasAdded, AddedMeas };
+  static std::vector<std::vector<double>> sBsPositions;
 
 private:
   eStatus status_;
   double TimeStamp_;
   std::vector<double> ToaMeas_;
-  std::vector<std::vector<double>> BsPositions_ = {{10, 15, 13}, {14, 17, 18}, {-10, 20, 7}};
+  //std::vector<std::vector<double>> BsPositions_ = {{10, 15, 13}, {14, 17, 18}, {-10, 20, 7}};
 
 public:
   // Constructor
@@ -26,14 +27,14 @@ public:
 
   //Set params
   void SetTimeStamp(double TimeStamp);
-  void SetBsPositions(std::vector<std::vector<double>> BsPositions);
+  // void SetBsPositions(std::vector<std::vector<double>> BsPositions);
   void SetToAMeas(std::vector<double> toaMeas);
 
   //Get Params
   double GetTimeStamp();
   std::vector<double> GetToaMeas();
   eStatus GetStatus();
-  std::vector<std::vector<double>> GetBsPositions();
+  // std::vector<std::vector<double>> GetBsPositions();
 };
 
 }
