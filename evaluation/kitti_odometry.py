@@ -7,6 +7,8 @@ from matplotlib import pyplot as plt
 import numpy as np
 import os
 from glob import glob
+from scipy.spatial.transform import Rotation as Rt
+import associate
 
 # from pgo.datasets.data_utils import load_poses_from_txt
 
@@ -28,32 +30,63 @@ def save_results_txt(poses: np.ndarray, out_file):
             f.write('\n')
 
 
-def load_poses_from_txt(file_name):
+def load_poses_from_txt(data_matrix):
     """Load poses from txt (KITTI format)
     Each line in the file should follow one of the following structures
         (1) idx pose(3x4 matrix in terms of 12 numbers)
         (2) pose(3x4 matrix in terms of 12 numbers)
 
     Args:
-        file_name (str): txt file path
+        a matrix is given of x y z qw qx qy qz
     Returns:
         poses (dict): {idx: 4x4 array}
     """
-    f = open(file_name, 'r')
-    s = f.readlines()
-    f.close()
+    # f = open(file_name, 'r')
+    # s = f.readlines()
+    # f.close()
+    # poses = {}
+    # for cnt, line in enumerate(s):
+    #     P = np.eye(4)
+    #     # line_split = [float(i) for i in line.split(",") if i != ""]
+    #     line_split = [float(i) for i in line.split(" ") if i != ""]
+    #     withIdx = len(line_split) == 13
+    #     # Input quaternion q = [qw, qx, qy, qz]
+    #     q = line_split[4:]
+    #     # Normalize the quaternion
+    #     q_norm = np.linalg.norm(q)
+    #     if q_norm > 0:
+    #         q = q / q_norm   
+    #     # Convert the quaternion to a rotation matrix using Scipy
+    #     r = Rt.from_quat(q)
+    #     R = r.as_matrix()
+    #     # Add the translations to the matrix
+    #     T = np.array([line_split[1:4]])
+    #     P[0:3,0:3] = R
+    #     P[0:3,3] = T
+
+    #     if withIdx:
+    #         frame_idx = line_split[0]
+    #     else:
+    #         frame_idx = cnt
+    #     poses[frame_idx] = P
+    ##################### New code just get the matrix ################
     poses = {}
-    for cnt, line in enumerate(s):
+    for cnt, row in enumerate(data_matrix):
         P = np.eye(4)
-        line_split = [float(i) for i in line.split(",") if i != ""]
-        withIdx = len(line_split) == 13
-        for row in range(3):
-            for col in range(4):
-                P[row, col] = line_split[row * 4 + col + withIdx]
-        if withIdx:
-            frame_idx = line_split[0]
-        else:
-            frame_idx = cnt
+        # Input quaternion q = [qw, qx, qy, qz]
+        q = row[0, 3:]
+        # Normalize the quaternion
+        q_norm = np.linalg.norm(q)
+        if q_norm > 0:
+            q = q / q_norm   
+        # Convert the quaternion to a rotation matrix using Scipy
+        r = Rt.from_quat(q)
+        R = r.as_matrix()
+        # Add the translations to the matrix
+        T = row[0, 0:3]
+        P[0:3,0:3] = R
+        P[0:3,3] = T
+        frame_idx = cnt
         poses[frame_idx] = P
     return poses
 
@@ -192,11 +225,11 @@ class KittiEvalOdom():
             self.cur_seq = i
             # Read pose txt
             self.cur_seq = '{:02}'.format(i)
-            # file_name = '{:02}.txt'.format(i)
+            file_name = '{:02}.txt'.format(i)
 
             poses_result = load_poses_from_txt(result_dir)
             poses_gt = load_poses_from_txt(self.gt_dir)
-            self.result_file_name = result_dir + file_name
+            # self.result_file_name = result_dir + file_name
             if len(poses_result) != len(poses_gt):
                 raise ValueError('Ground truth and estimated trajectories have a different number of poses.')
 
