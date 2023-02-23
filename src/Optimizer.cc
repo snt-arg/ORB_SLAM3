@@ -41,7 +41,6 @@
 
 #include "OptimizableTypes.h"
 
-
 #include<Toa.h>
 // #include <Eigen/Core>
 // #include <Eigen/Geometry>
@@ -54,37 +53,100 @@ namespace ORB_SLAM3
 
 // ///////////////////////////////This is my own code: add toa factor////////////////////////
 //Toa factor without adding nodes for base stations, Unary factor
-class ToaEdgeUnary : public g2o::BaseUnaryEdge<1, double, g2o::VertexSE3Expmap>
-{
+class ToaEdgeUnary : public g2o::BaseUnaryEdge<1, double, g2o::VertexSE3Expmap> {
+
+
+// public:
+//     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
+//     ToaEdgeUnary() {}
+
+//     void computeError() {
+//         const g2o::VertexSE3Expmap* v = static_cast<const g2o::VertexSE3Expmap*>(_vertices[0]);
+//         Eigen::Vector3d delta = v->estimate().inverse() * Eigen::Map<const Eigen::Vector3d>(_landmark.data());
+//         _error[0] = delta.norm() - _measurement;
+//     }
+
+// void linearizeOplus() {
+//     const g2o::VertexSE3Expmap* v = static_cast<const g2o::VertexSE3Expmap*>(_vertices[0]);
+//     Eigen::Isometry3d T = v->estimate();
+//     Eigen::Vector3d delta = T.inverse() * Eigen::Map<const Eigen::Vector3d>(_landmark.data());
+//     double distance = delta.norm();
+//     Eigen::Matrix<double, 1, 6> J;
+//     J.segment<3>(0) = -delta.transpose() / distance;
+//     J.segment<3>(3) = Eigen::Vector3d::Zero();
+//     Eigen::Matrix4d adj = T.matrix().topLeftCorner<4,4>();
+//     adj.block<3,3>(0,0) = adj.block<3,3>(0,0).transpose();
+//     _jacobianOplusXi = -J * adj;
+// }
+
+
+//     bool read(std::istream& is) {
+//         is >> _landmark[0] >> _landmark[1] >> _landmark[2] >> _measurement;
+//         return true;
+//     }
+
+//     bool write(std::ostream& os) const {
+//         os << _landmark[0] << " " << _landmark[1] << " " << _landmark[2] << " " << _measurement;
+//         return os.good();
+//     }
+
+//     void setLandmark(const std::vector<double>& landmark) {
+//         assert(landmark.size() == 3 && "Landmark position must be a vector of length 3");
+//         std::copy(landmark.begin(), landmark.end(), _landmark.data());
+//     }
+
+//     std::vector<double> getLandmark() const {
+//         return std::vector<double>(_landmark.data(), _landmark.data() + _landmark.size());
+//     }
+
+// protected:
+//     Eigen::Array<double, 3, 1> _landmark;
+// };
+
 public:
-  EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+    ToaEdgeUnary() {}
+    void computeError() override {
+        const g2o::VertexSE3Expmap* v = static_cast<const g2o::VertexSE3Expmap*>(_vertices[0]);
+        const Eigen::Vector3d& nodeP = v->estimate().translation();
+        double dEst = (nodeP - _landmark).norm();
+        _error[0] = dEst - _measurement;
+    }
+    void linearizeOplus() override {
+        const g2o::VertexSE3Expmap* v = static_cast<const g2o::VertexSE3Expmap*>(_vertices[0]);
+        const Eigen::Vector3d& nodeP = v->estimate().translation();
+        double dEst = (nodeP - _landmark).norm();
+        Eigen::Matrix<double, 1, 3> j1 = (nodeP - _landmark) / dEst;
+        _jacobianOplusXi = Eigen::Matrix<double, 1, 6>::Zero();
+        _jacobianOplusXi.segment<3>(0) = j1 * v->estimate().rotation().toRotationMatrix();
+    }
 
-  ToaEdgeUnary() {}
+    bool read(std::istream& is) override {
+        is >> _measurement;
+        is >> _landmark(0);
+        is >> _landmark(1);
+        is >> _landmark(2);
+        return true;
+    }
+    bool write(std::ostream& os) const override {
+        os << _measurement << " ";
+        os << _landmark(0) << " ";
+        os << _landmark(1) << " ";
+        os << _landmark(2) << " ";
+        return true;
+    }
 
-  bool read(std::istream& is) { return true; }
-  bool write(std::ostream& os) const { return os.good(); }
+    // bool read(istream& is) override { return true; }
+    // bool write(ostream& os) const override { return true; }
+    void setLandmark(vector<double> landmark) { _landmark = Eigen::Vector3d(landmark[0], landmark[1], landmark[2]); }
+    void setMeasurement(double measurement) { _measurement = measurement; }
 
-  void computeError()
-  {
-    const g2o::VertexSE3Expmap* v = static_cast<const g2o::VertexSE3Expmap*>(_vertices[0]);
-    Eigen::Isometry3d T = v->estimate();
-    Eigen::Vector3d P = T * _landmark; // transform the landmark position to the node frame
-
-    double expectedD = (P - _nodePosition).norm();
-    _error[0] = expectedD - _measurement;
-  }
-
-  void setMeasurement(double m) { _measurement = m; }
-  double measurement() const { return _measurement; }
-
-  void setLandmarkPosition(const Eigen::Vector3d& landmark) { _landmark = landmark; }
-  void setNodePosition(const Eigen::Vector3d& nodePosition) { _nodePosition = nodePosition; }
-
-protected:
-  double _measurement;
-  Eigen::Vector3d _landmark;
-  Eigen::Vector3d _nodePosition;
+private:
+    double _measurement;
+    Eigen::Vector3d _landmark;
 };
+
+
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Custom vertex for XYZ node
@@ -156,40 +218,59 @@ public:
 static void OptimizeToa(int frameID, std::vector<double> vToa,  g2o::SparseOptimizer& optimizer)
 {
 
-// This is for adding bs nodes with negative ID and binary edges
-    if (vToa == vector<double>(1,0) ){return;}
-    VertexXYZ* v_1 = dynamic_cast<VertexXYZ*>(optimizer.vertex(-1));
-    // std::cout << "Vertex ID: " << v_1->id() << std::endl;
-    // std::cout << "Vertex Estimate: " << v_1->estimate().matrix() << std::endl;
-    // if ( v_1 != nullptr )
-    // {
-        cout<<"v1 pointer in null";
-           int bs_counter = 0;
-           for (auto& bs : ToA::sBsPositions)
-           {
-               bs_counter--;
-               VertexXYZ* vBs = new VertexXYZ();
-               vBs->setEstimate(Eigen::Vector3d(bs[1], bs[2], bs[3]));
-               vBs->setId(bs_counter);
-               vBs ->setFixed(true);
-               optimizer.addVertex(vBs);
-            }
-    // }
+    // uncomment this for the case where you want to add nodes for base stations
 
-//These lines of code add edges between the BS and the current frame/keyframe
+// // This is for adding bs nodes with negative ID and binary edges
+//     if (vToa == vector<double>(1,0) ){return;}
+//     VertexXYZ* v_1 = dynamic_cast<VertexXYZ*>(optimizer.vertex(-1));
+//     // std::cout << "Vertex ID: " << v_1->id() << std::endl;
+//     // std::cout << "Vertex Estimate: " << v_1->estimate().matrix() << std::endl;
+//     // if ( v_1 != nullptr )
+//     // {
+//         cout<<"v1 pointer in null";
+//            int bs_counter = 0;
+//            for (auto& bs : ToA::sBsPositions)
+//            {
+//                bs_counter--;
+//                VertexXYZ* vBs = new VertexXYZ();
+//                vBs->setEstimate(Eigen::Vector3d(bs[1], bs[2], bs[3]));
+//                vBs->setId(bs_counter);
+//                vBs ->setFixed(true);
+//                optimizer.addVertex(vBs);
+//             }
+//     // }
+
+// //These lines of code add edges between the BS and the current frame/keyframe
+// int lm_id = 0;       
+// for (auto& m : vToa) {
+//     lm_id ++;
+//     // g2o::VertexXYZ* e = new g2o::EdgeSE3XYZ();
+//     EdgeDistance* e = new EdgeDistance();
+//     e->setMeasurement(m); 
+//     e->setInformation(0.1*Eigen::Matrix<double, 1, 1>::Identity());
+//     e->setVertex(0,optimizer.vertex(-lm_id));
+//     e->setVertex(1,optimizer.vertex(frameID));
+//     e->setRobustKernel(new g2o::RobustKernelHuber());
+//     optimizer.addEdge(e);   
+// }
+
+
+
+//Here we dont add new vertex to the graph, just new unary edges
+
 int lm_id = 0;       
 for (auto& m : vToa) {
     lm_id ++;
     // g2o::VertexXYZ* e = new g2o::EdgeSE3XYZ();
-    EdgeDistance* e = new EdgeDistance();
+    ToaEdgeUnary* e = new ToaEdgeUnary();
     e->setMeasurement(m); 
-    e->setInformation(Eigen::Matrix<double, 1, 1>::Identity());
-    e->setVertex(0,optimizer.vertex(-lm_id));
-    e->setVertex(1,optimizer.vertex(frameID));
+    e->setInformation(0.1*Eigen::Matrix<double, 1, 1>::Identity()); //TODO-msm here we assume the same uncertainty over all measurement 
+    e->setVertex(0,optimizer.vertex(frameID));
+    e->setLandmark(ToA::sBsPositions[lm_id-1]);
     e->setRobustKernel(new g2o::RobustKernelHuber());
-    optimizer.addEdge(e);
-    
+    optimizer.addEdge(e);   
 }
+
 };
 
 // /////////////////////////////////////////////////////////////////////////
@@ -1741,7 +1822,7 @@ void Optimizer::OptimizeEssentialGraph(Map* pMap, KeyFrame* pLoopKF, KeyFrame* p
     z_vec << 0.0, 0.0, 1.0;
 
     const int minFeat = 100;
-
+    //TODO-msm: need to check if we need to add toa factor nor not
     // Set KeyFrame vertices
     for(size_t i=0, iend=vpKFs.size(); i<iend;i++)
     {
@@ -2002,7 +2083,8 @@ void Optimizer::OptimizeEssentialGraph(KeyFrame* pCurKF, vector<KeyFrame*> &vpFi
     Verbose::PrintMess("Opt_Essential: There are " + to_string(vpFixedCorrectedKFs.size()) + " KFs fixed in the old map", Verbose::VERBOSITY_DEBUG);
     Verbose::PrintMess("Opt_Essential: There are " + to_string(vpNonFixedKFs.size()) + " KFs non-fixed in the merged map", Verbose::VERBOSITY_DEBUG);
     Verbose::PrintMess("Opt_Essential: There are " + to_string(vpNonCorrectedMPs.size()) + " MPs non-corrected in the merged map", Verbose::VERBOSITY_DEBUG);
-
+    //TODO-msm: need to check if I need to add the toaoptimzier or not
+    //The difference between the sim3vertex is that it also involves scaling
     g2o::SparseOptimizer optimizer;
     optimizer.setVerbose(false);
     g2o::BlockSolver_7_3::LinearSolverType * linearSolver =
@@ -2809,6 +2891,13 @@ void Optimizer::LocalInertialBA(KeyFrame *pKF, bool *pbStopFlag, Map *pMap, int&
     for(int i=0;i<N;i++)
     {
         KeyFrame* pKFi = vpOptimizableKFs[i];
+    ////////////////////////////////////////////////////////////////////////
+    //TODO-msm: are visual keys not optimizable? maybe we can add cut and paste this line of codes
+    //We just add toa factor to non-fixed Keyfram
+    //seems that fixed keyframe just can be used to imporve the mapping
+    //as we do not localize BS (radio map), we do not use it here
+    OptimizeToa(pKFi->mnId, pKFi->vToa_ , optimizer);
+    // ////////////////////my own code/////////////////////////////////////////
 
         if(!pKFi->mPrevKF)
         {
@@ -3790,6 +3879,12 @@ void Optimizer::LocalBundleAdjustment(KeyFrame* pMainKF,vector<KeyFrame*> vpAdju
         if(pKFi->mnId>maxKFid)
             maxKFid=pKFi->mnId;
 
+    ////////////////////////////////////////////////////////////////////////
+    //We just add toa factor to non-fixed Keyfram
+    //seems that fixed keyframe just can be used to imporve the mapping
+    //as we do not localize BS (radio map), we do not use it here
+    OptimizeToa(pKFi->mnId, pKFi->vToa_ , optimizer);
+    // ////////////////////my own code/////////////////////////////////////////
         set<MapPoint*> spViewMPs = pKFi->GetMapPoints();
         for(MapPoint* pMPi : spViewMPs)
         {
@@ -4753,6 +4848,10 @@ int Optimizer::PoseInertialOptimizationLastKeyFrame(Frame *pFrame, bool bRecInit
     const float thHuberMono = sqrt(5.991);
     const float thHuberStereo = sqrt(7.815);
 
+////////////////////////////////////////////////////////////////////////
+OptimizeToa(0, pFrame->vToa_ , optimizer);
+// ////////////////////my own code//////////////////////////////////////
+
     {
         unique_lock<mutex> lock(MapPoint::mGlobalMutex);
 
@@ -5136,6 +5235,10 @@ int Optimizer::PoseInertialOptimizationLastFrame(Frame *pFrame, bool bRecInit)
 
     const float thHuberMono = sqrt(5.991);
     const float thHuberStereo = sqrt(7.815);
+
+////////////////////////////////////////////////////////////////////////
+OptimizeToa(0, pFrame->vToa_ , optimizer);
+// ////////////////////my own code/////////////////////////////////////////
 
     {
         unique_lock<mutex> lock(MapPoint::mGlobalMutex);

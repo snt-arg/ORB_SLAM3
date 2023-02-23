@@ -200,20 +200,6 @@ int main(int argc, char *argv[])
 
                         if(ni>0)
             {
-                // cout << "t_cam " << tframe << endl;
-            /*
-
-                        while(!(vTimestampsToa[seq][toaMeas_ind[seq]]<=tframe && tframe<=vTimestampsToa[seq][toaMeas_ind[seq]+1]))
-            {
-                toaMeas_ind[seq]++;
-            }
-
-            if ((vTimestampsToa[seq][toaMeas_ind[seq]+1]-tframe)<(tframe-vTimestampsToa[seq][toaMeas_ind[seq]]))
-            {
-                toaMeas_ind[seq]++;
-            }
-
-            */
                 while(vTimestampsToa[seq][toaMeas_ind[seq]+1]<=tframe )
                 {
                     toaMeas_ind[seq]++;
@@ -221,9 +207,6 @@ int main(int argc, char *argv[])
                 if (vTimestampsToa[seq][toaMeas_ind[seq]+1] - tframe < tframe - vTimestampsToa[seq][toaMeas_ind[seq]]) {toaMeas_ind[seq]++;}
             }
 
-        //for debugging
-        std::cout << "Type of vector v is: " << typeid(vToaAll[seq][toaMeas_ind[seq]]).name() << std::endl;
-        std::cout << "Size of vector v is: " << vToaAll[seq][toaMeas_ind[seq]].size() << std::endl;
 
     #ifdef COMPILEDWITHC11
             std::chrono::steady_clock::time_point t1 = std::chrono::steady_clock::now();
@@ -234,7 +217,6 @@ int main(int argc, char *argv[])
             // Pass the image to the SLAM system
             // cout << "tframe = " << tframe << endl;
              if (abs(tframe - vTimestampsToa[seq][toaMeas_ind[seq]]) < 0.1 ){
-                // cout<<"This is the time difference   "<< abs(tframe - vTimestampsToa[seq][toaMeas_ind[seq]]) <<endl;
             SLAM.TrackMonocularToa(im,tframe, vToaAll[seq][toaMeas_ind[seq]], vImuMeas); // TODO change to monocular_inertial
             }else{
                  SLAM.TrackMonocularToa(im,tframe, vector<double>(1,0), vImuMeas);
@@ -281,8 +263,8 @@ int main(int argc, char *argv[])
     // Save camera trajectory
     if (bFileName)
     {
-        const string kf_file =  "kf_" + string(argv[argc-1]) + ".txt";
-        const string f_file =  "f_" + string(argv[argc-1]) + ".txt";
+        const string kf_file =  "../Results/kf_" + string(argv[argc-1]) + ".txt";
+        const string f_file =  "../Results/f_" + string(argv[argc-1]) + ".txt";
         SLAM.SaveTrajectoryEuRoC(f_file);
         SLAM.SaveKeyFrameTrajectoryEuRoC(kf_file);
     }

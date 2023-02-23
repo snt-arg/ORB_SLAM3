@@ -150,7 +150,8 @@ if __name__=="__main__":
     first_list = associate.read_file_list(args.first_file, False)
     second_list = associate.read_file_list(args.second_file, False)
 
-    matches = associate.associate(first_list, second_list,float(args.offset),float(args.max_difference))    
+    matches = associate.associate(first_list, second_list,float(args.offset),float(args.max_difference))  
+    print(len(matches))  
     if len(matches)<2:
         sys.exit("Couldn't find matching timestamp pairs between groundtruth and estimated trajectory! Did you choose the correct sequence?")
     first_xyz = numpy.matrix([[float(value) for value in first_list[a][0:3]] for a,b in matches]).transpose()
@@ -222,8 +223,12 @@ if __name__=="__main__":
             
         ax.set_xlabel('x [m]')
         ax.set_ylabel('y [m]')
-        plt.axis('equal')
+        # plt.axis('equal')
         plt.savefig(args.plot,format="pdf")
+
+
+        # python evaluate_ate_scale.py  Ground_truth/EuRoC_left_cam/V101_GT.txt ../Results/f_V101-monotoa_est.txt --offset 0  --verbose2 --plot fig --save estimated_trajectory.txt --save_associations groundtruth_and_estimated.txt --scale 2.2
+
 
 
         
