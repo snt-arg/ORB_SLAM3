@@ -6,8 +6,8 @@ import numpy as np
 
 def main():
     dataset_gt_path = "Ground_truth/EuRoC_left_cam/V101_GT.txt"
-    # results_path = "../Results/f_V101-monotoa_est.txt"
-    results_path = "../Results_baseline/f_V101_monoeuroc.txt"  
+    # results_path = "../Results/kf_V101-monotoa_est.txt"
+    results_path = "../Results_baseline/kf_V101_monoeuroc.txt"  
     first_list = associate.read_file_list(dataset_gt_path, False)
     second_list = associate.read_file_list(results_path , False)
     offset = 0
