@@ -100,6 +100,7 @@ def scale_lse_solver(X, Y):
         scale (float): scaling factor
     """
     scale = np.sum(X * Y) / np.sum(X ** 2)
+    print("Scale is -- ",scale)
     return scale
 
 

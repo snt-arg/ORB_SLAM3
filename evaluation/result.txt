@@ -2,6 +2,6 @@ Sequence: 	 0
 Trans. err. (%): 	 0.000 
 Rot. err. (deg/100m): 	 0.000 
 ATE (m): 	 0.036 
-RPE (m): 	 0.323 
-RPE (deg): 	 14.331 
+RPE (m): 	 0.314 
+RPE (deg): 	 14.004 
 

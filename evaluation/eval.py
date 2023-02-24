@@ -6,8 +6,8 @@ import numpy as np
 
 def main():
     gt_file = "Ground_truth/EuRoC_left_cam/V101_GT.txt"
-    est_file = "../Results/kf_V101-monotoa_est.txt"
-    # est_file = "../Results_baseline/kf_V101_monoeuroc.txt"  
+    # est_file = "../Results/kf_V101-monotoa_est.txt"
+    est_file = "../Results_baseline/kf_V101_monoeuroc.txt"  
     first_list = associate.read_file_list(gt_file, False)
     second_list = associate.read_file_list(est_file , False)
     offset = 0
@@ -28,6 +28,7 @@ def main():
             # os.path.join(args_dict['eval_out_dir'], dataset_name, 'cam_02_est'), # copied from gt_file
             first_list_data,
             second_list_data,
+            # alignment='7dof',
             alignment='7dof',
             seqs=[0]
         )

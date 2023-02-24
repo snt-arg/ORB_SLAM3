@@ -236,4 +236,15 @@ if __name__=="__main__":
 
 
 
+        #using evo
+        # evo_traj euroc PATH/TO/ESTIMATED/TRAJECTORY.txt --ref=PATH/TO/GROUND/TRUTH/TRAJECTORY.txt -p --plot_mode=xz
         
+        evo_traj euroc Ground_truth/EuRoC_left_cam/V101_GT.txt  --ref=../Datasets/EuRoC/V101/mav0/vicon0/data.csv -p --plot_mode=xz
+
+        evo_ape euroc  ../Datasets/EuRoC/V101/mav0/vicon0/data.csv ../results_tum_format/f_v101_mono -va --plot --plot_mode xy --save_results results/ORB.zip --t_max_diff 0.005 --plot_full_ref -s
+        # gt must be in csv, the original format of euroc, but estimatio must be in format of tum, time_stamp in seconds
+
+
+
+
+
