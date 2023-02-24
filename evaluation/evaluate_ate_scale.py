@@ -231,8 +231,8 @@ if __name__=="__main__":
         plt.savefig(args.plot,format="pdf")
 
 
-        # python evaluate_ate_scale.py  Ground_truth/EuRoC_left_cam/V101_GT.txt ../Results/f_V101-monotoa_est.txt --offset 0  --verbose2 --plot toa_mono_v101 --save estimated_trajectory.txt --save_associations groundtruth_and_estimated.txt --scale 2.2
-        # python evaluate_ate_scale.py  Ground_truth/EuRoC_left_cam/V101_GT.txt ../Results_baseline/f_V101_monoeuroc.txt --offset 0  --verbose2 --plot mono_v101_baseline --save estimated_trajectory.txt --save_associations groundtruth_and_estimated.txt --scale 2.2
+        # python evaluate_ate_scale.py  Ground_truth/EuRoC_left_cam/V101_GT.txt ../Results/kf_V101-monotoa_est.txt --offset 0  --verbose2 --plot toa_mono_v101.pdf --save estimated_trajectory.txt --save_associations groundtruth_and_estimated.txt --scale 2.2
+        # python evaluate_ate_scale.py  Ground_truth/EuRoC_left_cam/V101_GT.txt ../Results_baseline/kf_V101_monoeuroc.txt --offset 0  --verbose2 --plot mono_v101_baseline.pdf --save estimated_trajectory.txt --save_associations groundtruth_and_estimated.txt --scale 2.2
 
 
 
