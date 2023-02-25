@@ -112,14 +112,14 @@ public:
         double dEst = (nodeP - _landmark).norm();
         _error[0] = dEst - _measurement;
     }
-    void linearizeOplus() override {
-        const g2o::VertexSE3Expmap* v = static_cast<const g2o::VertexSE3Expmap*>(_vertices[0]);
-        const Eigen::Vector3d& nodeP = v->estimate().translation();
-        double dEst = (nodeP - _landmark).norm();
-        Eigen::Matrix<double, 1, 3> j1 = (nodeP - _landmark) / dEst;
-        _jacobianOplusXi = Eigen::Matrix<double, 1, 6>::Zero();
-        _jacobianOplusXi.segment<3>(0) = j1 * v->estimate().rotation().toRotationMatrix();
-    }
+    // void linearizeOplus() override {
+    //     const g2o::VertexSE3Expmap* v = static_cast<const g2o::VertexSE3Expmap*>(_vertices[0]);
+    //     const Eigen::Vector3d& nodeP = v->estimate().translation();
+    //     double dEst = (nodeP - _landmark).norm();
+    //     Eigen::Matrix<double, 1, 3> j1 = (nodeP - _landmark) / dEst;
+    //     _jacobianOplusXi = Eigen::Matrix<double, 1, 6>::Zero();
+    //     _jacobianOplusXi.segment<3>(0) = j1 * v->estimate().rotation().toRotationMatrix();
+    // }
 
     bool read(std::istream& is) override {
         is >> _measurement;
@@ -264,7 +264,7 @@ for (auto& m : vToa) {
     // g2o::VertexXYZ* e = new g2o::EdgeSE3XYZ();
     ToaEdgeUnary* e = new ToaEdgeUnary();
     e->setMeasurement(m); 
-    e->setInformation(0.1*Eigen::Matrix<double, 1, 1>::Identity()); //TODO-msm here we assume the same uncertainty over all measurement 
+    e->setInformation(0.01*Eigen::Matrix<double, 1, 1>::Identity()); //TODO-msm here we assume the same uncertainty over all measurement 
     e->setVertex(0,optimizer.vertex(frameID));
     e->setLandmark(ToA::sBsPositions[lm_id-1]);
     e->setRobustKernel(new g2o::RobustKernelHuber());

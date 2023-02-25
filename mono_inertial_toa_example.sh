@@ -10,4 +10,4 @@ pathDatasetEuroc='Datasets/EuRoC' #Example, it is necesary to change it by the d
 #------------------------------------
 # Monocular Examples
 echo "Launching VH01"
-./Examples/Monocular-Inertial/mono_inertial_toa_euroc ./Vocabulary/ORBvoc.txt ./Examples/Monocular/EuRoC.yaml "$pathDatasetEuroc"/V101 ./Examples/Monocular/EuRoC_TimeStamps/V101.txt dataset-V101_monoMonocular
+./Examples/Monocular-Inertial/mono_inertial_toa_euroc ./Vocabulary/ORBvoc.txt ./Examples/Monocular/EuRoC.yaml "$pathDatasetEuroc"/V101 ./Examples/Monocular/EuRoC_TimeStamps/V101.txt V101-monotoa_est
