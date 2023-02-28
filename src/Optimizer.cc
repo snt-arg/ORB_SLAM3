@@ -107,9 +107,13 @@ class ToaEdgeUnary : public g2o::BaseUnaryEdge<1, double, g2o::VertexSE3Expmap> 
 public:
     ToaEdgeUnary() {}
     void computeError() override {
+        // const g2o::VertexSE3Expmap* v = static_cast<const g2o::VertexSE3Expmap*>(_vertices[0]);
+        // const Eigen::Vector3d& nodeP = v->estimate().translation();
+        // double dEst = (nodeP - _landmark).norm();
+        // _error[0] = dEst - _measurement;
+
         const g2o::VertexSE3Expmap* v = static_cast<const g2o::VertexSE3Expmap*>(_vertices[0]);
-        const Eigen::Vector3d& nodeP = v->estimate().translation();
-        double dEst = (nodeP - _landmark).norm();
+        double dEst = (v->estimate().inverse().map(_landmark)).norm();
         _error[0] = dEst - _measurement;
     }
     // void linearizeOplus() override {
@@ -211,6 +215,9 @@ public:
     virtual bool read(std::istream& is){return false;}
     virtual bool write(std::ostream& os) const{return false;}
 };
+
+
+
 
 
 // ///////////////////////////////////////////////////////////////////////////////////////////
@@ -3883,6 +3890,7 @@ void Optimizer::LocalBundleAdjustment(KeyFrame* pMainKF,vector<KeyFrame*> vpAdju
     //We just add toa factor to non-fixed Keyfram
     //seems that fixed keyframe just can be used to imporve the mapping
     //as we do not localize BS (radio map), we do not use it here
+
     OptimizeToa(pKFi->mnId, pKFi->vToa_ , optimizer);
     // ////////////////////my own code/////////////////////////////////////////
         set<MapPoint*> spViewMPs = pKFi->GetMapPoints();

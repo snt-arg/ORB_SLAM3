@@ -22,7 +22,9 @@ void LoadIMU(const string &strImuPath, vector<double> &vTimeStamps, vector<cv::P
 
 void LoadTOA(const string strToaPath, vector<double> &vTimeStamps,  vector<vector<double>> &vToa,  int Bs_num) ;
 
-std::vector<std::vector<double>> ORB_SLAM3::ToA::sBsPositions = {{10, 15, 13}, {14, 17, 18}, {-10, 20, 7}};
+// std::vector<std::vector<double>> ORB_SLAM3::ToA::sBsPositions = {{6,	7, 5}, {-26,-70, 10}, {-120,	40,	15}};
+std::vector<std::vector<double>> ORB_SLAM3::ToA::sBsPositions = {{5, 6, 3}, {-6, 15, 5}, {10, -3, 8}};
+
 
 double ttrack_tot = 0;
 int main(int argc, char *argv[])
@@ -45,7 +47,7 @@ int main(int argc, char *argv[])
     }
 
     // const vector<vector<double>> bs_positions = {{1, 20, 3}, {4, 50, 6}, {7, 80, 9}};
-     ORB_SLAM3::ToA::sBsPositions = {{1, 20, 3}, {4, 50, 6}, {7, 80, 9}};
+     ORB_SLAM3::ToA::sBsPositions = {{5, 6, 3}, {-6, 15, 5}, {10, -3, 8}};
 
     // Load all sequences:
     int seq;
@@ -263,8 +265,9 @@ int main(int argc, char *argv[])
     // Save camera trajectory
     if (bFileName)
     {
-        const string kf_file =  "kf_" + string(argv[argc-1]) + ".txt";
-        const string f_file =  "f_" + string(argv[argc-1]) + ".txt";
+        const string abs_path = "/home/meisam/ORB_SLAM3/Results/";
+        const string kf_file =  abs_path+"kf_" + string(argv[argc-1]) + ".txt";
+        const string f_file =  abs_path+"f_" + string(argv[argc-1]) + ".txt";
         SLAM.SaveTrajectoryEuRoC(f_file);
         SLAM.SaveKeyFrameTrajectoryEuRoC(kf_file);
     }
