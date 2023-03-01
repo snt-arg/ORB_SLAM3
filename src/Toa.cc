@@ -11,8 +11,7 @@ namespace ORB_SLAM3
 }
 
 //Set params 
- 
-
+std::vector<std::vector<double>> ORB_SLAM3::ToA::sBsPositions = {{5, 6, 3}, {-6, 15, 5}, {10, -3, 8}};
 void ToA::SetTimeStamp(double TimeStamp) {TimeStamp_ = TimeStamp;}
 void ToA::SetToAMeas(std::vector<double> toaMeas) {ToaMeas_ = toaMeas; }
 // void ToA::SetBsPositions(std::vector<std::vector<double>> BsPositions) { sBsPositions = BsPositions;}

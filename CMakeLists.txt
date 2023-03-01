@@ -195,6 +195,10 @@ add_executable(test_toa_factor
         test/test_toa_factor.cc)
 target_link_libraries(test_toa_factor ${PROJECT_NAME})
 
+add_executable(toa_test
+        test/toa_test.cc)
+target_link_libraries(toa_test ${PROJECT_NAME})
+
 
 add_executable(mono_tum
         Examples/Monocular/mono_tum.cc)
