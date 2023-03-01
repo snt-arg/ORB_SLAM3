@@ -1,0 +1,44 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+
+        {
+            "name": "(gdb) Launch",
+            "type": "cppdbg",
+            "request": "launch",
+            //"program": "${workspaceFolder}/Examples/Monocular/mono_euroc",
+             //"args": ["${workspaceFolder}/Vocabulary/ORBvoc.txt", "${workspaceFolder}/Examples/Monocular/EuRoC.yaml", "${workspaceFolder}/Datasets/EuRoC/MH01", "${workspaceFolder}/Examples/Monocular/EuRoC_TimeStamps/MH01.txt", "dataset-MH01_mono"],
+
+            
+            "program": "${workspaceFolder}/Examples/Monocular-Inertial/mono_inertial_euroc",
+            "args": ["${workspaceFolder}/Vocabulary/ORBvoc.txt", "${workspaceFolder}/Examples/Monocular-Inertial/EuRoC.yaml", "${workspaceFolder}/Datasets/EuRoC/V101", "${workspaceFolder}/Examples/Monocular-Inertial/EuRoC_TimeStamps/V101.txt", "V101_monotoa"],
+
+
+        //     "program": "${workspaceFolder}/Examples/Monocular-Inertial/mono_inertial_toa_euroc",
+        //     // "program": "${workspaceFolder}/Examples/Monocular/toa_test",
+        //    "args": ["${workspaceFolder}/Vocabulary/ORBvoc.txt", "${workspaceFolder}/Examples/Monocular/EuRoC.yaml", "${workspaceFolder}/Datasets/EuRoC/V101", "${workspaceFolder}/Examples/Monocular/EuRoC_TimeStamps/V101.txt", "V101_monotoa"],
+
+            "stopAtEntry": false,
+            "cwd": "${fileDirname}",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                },
+                {
+                    "description": "Set Disassembly Flavor to Intel",
+                    "text": "-gdb-set disassembly-flavor intel",
+                    "ignoreFailures": true
+                }
+            ]
+        }
+
+    ]
+}
