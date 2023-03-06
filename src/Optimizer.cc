@@ -106,16 +106,23 @@ class ToaEdgeUnary : public g2o::BaseUnaryEdge<1, double, g2o::VertexSE3Expmap> 
 
 public:
     ToaEdgeUnary() {}
-    void computeError() override {
-        // const g2o::VertexSE3Expmap* v = static_cast<const g2o::VertexSE3Expmap*>(_vertices[0]);
-        // const Eigen::Vector3d& nodeP = v->estimate().translation();
-        // double dEst = (nodeP - _landmark).norm();
-        // _error[0] = dEst - _measurement;
-
+    void computeError() override {  
         const g2o::VertexSE3Expmap* v = static_cast<const g2o::VertexSE3Expmap*>(_vertices[0]);
-        double dEst = (v->estimate().inverse().map(_landmark)).norm();
+        const Eigen::Vector3d& translation = v->estimate().translation();
+        double dEst = (translation - _landmark ).norm();
         _error[0] = dEst - _measurement;
-    }
+        cout<<"This is the landmark unary: "<<_landmark<<endl;
+        cout<<"This is the translation: "<<translation<<endl;
+        cout<<"This is the measurement: "<<_measurement<<endl;
+        cout<<"dEst TOAEdge unary: "<<dEst<<endl;
+        cout<<"_error: "<<_error[0]<<endl;
+        cout<<"---------------------------------"<<endl;
+        }
+
+    //     const g2o::VertexSE3Expmap* v = static_cast<const g2o::VertexSE3Expmap*>(_vertices[0]);
+    //     double dEst = (v->estimate().inverse().map(_landmark)).norm();
+    //     _error[0] = dEst - _measurement;
+    // }
     // void linearizeOplus() override {
     //     const g2o::VertexSE3Expmap* v = static_cast<const g2o::VertexSE3Expmap*>(_vertices[0]);
     //     const Eigen::Vector3d& nodeP = v->estimate().translation();
@@ -125,23 +132,24 @@ public:
     //     _jacobianOplusXi.segment<3>(0) = j1 * v->estimate().rotation().toRotationMatrix();
     // }
 
-    bool read(std::istream& is) override {
-        is >> _measurement;
-        is >> _landmark(0);
-        is >> _landmark(1);
-        is >> _landmark(2);
-        return true;
-    }
-    bool write(std::ostream& os) const override {
-        os << _measurement << " ";
-        os << _landmark(0) << " ";
-        os << _landmark(1) << " ";
-        os << _landmark(2) << " ";
-        return true;
-    }
+    // bool read(std::istream& is) override {
+    //     is >> _measurement;
+    //     is >> _landmark(0);
+    //     is >> _landmark(1);
+    //     is >> _landmark(2);
+    //     return true;
+    // }
+    // bool write(std::ostream& os) const override {
+    //     os << _measurement << " ";
+    //     os << _landmark(0) << " ";
+    //     os << _landmark(1) << " ";
+    //     os << _landmark(2) << " ";
+    //     return true;
+    // }
 
-    // bool read(istream& is) override { return true; }
-    // bool write(ostream& os) const override { return true; }
+    bool read(istream& is) override { return true; }
+    bool write(ostream& os) const override { return true; }
+
     void setLandmark(vector<double> landmark) { _landmark = Eigen::Vector3d(landmark[0], landmark[1], landmark[2]); }
     void setMeasurement(double measurement) { _measurement = measurement; }
 
@@ -226,12 +234,19 @@ public:
 
     void computeError() override {
         const g2o::VertexSim3Expmap* v = static_cast<const g2o::VertexSim3Expmap*>(_vertices[0]);
-        Sophus::SE3f Tiw(v->estimate().rotation().cast<float>(), v->estimate().translation().cast<float>()/v->estimate().scale() );
+        // Sophus::SE3f Tiw(v->estimate().rotation().cast<float>(), v->estimate().translation().cast<float>() );
         // cout<<"Tiw: "<<Tiw.matrix()<<endl;
         // cout<<"_landmark: "<<_landmark<<endl;
-        double dEst = (Tiw.inverse() * _landmark).head<3>().norm();
+        // double dEst = (Tiw.inverse() * _landmark).head<3>().norm();
+
+        const Eigen::Vector3d& translation = v->estimate().translation();
+        double dEst = (translation - _landmark.cast<double>()).norm();
         _error[0] = dEst - _measurement;
-        cout<<"dEst: "<<dEst<<endl;
+
+        cout<<"This is the landmark: "<<_landmark<<endl;
+        cout<<"This is the translation: "<<translation<<endl;
+        cout<<"This is the measurement: "<<_measurement<<endl;
+        cout<<"dEst TOAEdge SIM3: "<<dEst<<endl;
         cout<<"_error: "<<_error[0]<<endl;
         
     }
@@ -250,23 +265,48 @@ public:
         os << _landmark(2) << " ";
         return true;
     }
-    void setLandmark(vector<double> landmark) { _landmark = Eigen::Vector4f(landmark[0], landmark[1], landmark[2], 1); }
+    // void setLandmark(vector<double> landmark) { _landmark = Eigen::Vector4f(landmark[0], landmark[1], landmark[2], 1); }
+    void setLandmark(vector<double> landmark) { _landmark = Eigen::Vector3d(landmark[0], landmark[1], landmark[2]); }
     void setMeasurement(double measurement) { _measurement = measurement; }
     private:
     double _measurement;
-    Eigen::Vector4f _landmark;
+    Eigen::Vector3d _landmark;
 };
 
+
+class GpsSim3edge : public g2o::BaseUnaryEdge<3, Eigen::Vector3d, g2o::VertexSim3Expmap> {
+
+public:
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+    GpsSim3edge() {}
+
+    void computeError() override {
+        const g2o::VertexSim3Expmap* v = static_cast<const g2o::VertexSim3Expmap*>(_vertices[0]);
+        _error = v->estimate().translation() - _measurement;
+    }
+
+  virtual bool read(std::istream& is) { return true; }
+  virtual bool write(std::ostream& os) const { return true; }
+
+    // void setLandmark(vector<double> landmark) { _landmark = Eigen::Vector4f(landmark[0], landmark[1], landmark[2], 1); }
+    void setMeasurement(vector<double> measurement) { _measurement = Eigen::Vector3d(measurement[0], measurement[1], measurement[2]); }
+    private:
+    Eigen::Vector3d _measurement;
+};
 // ///////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////my own code/////////////////////////////////////////
 static void OptimizeToa(int frameID, std::vector<double> vToa,  g2o::SparseOptimizer& optimizer, bool bSim3 = true)
 {
-
+    // cout<<"frameID: "<<frameID<<endl;
+    // cout<<"Vtoa: "<<vToa[1]<<endl;
+    // cout<<"Vtoa: "<<vToa[2]<<endl;
+    // cout<<"Vtoa: "<<vToa[3]<<endl;
+ optimizer.setVerbose(false);
 int lm_id = 0;   
 if(!bSim3){    
 for (auto& m : vToa) {
     lm_id ++;
-    // g2o::VertexXYZ* e = new g2o::EdgeSE3XYZ();
+    // cout<<"this is the measurement: "<<m<<endl;
     ToaEdgeUnary* e = new ToaEdgeUnary();
     e->setMeasurement(m); 
     e->setInformation(0.01*Eigen::Matrix<double, 1, 1>::Identity()); //TODO-msm here we assume the same uncertainty over all measurement 
@@ -279,32 +319,28 @@ for (auto& m : vToa) {
     lm_id ++;
     TOASim3edge* e = new TOASim3edge();
     e->setMeasurement(m); 
-    e->setInformation(0.01*Eigen::Matrix<double, 1, 1>::Identity()); //TODO-msm here we assume the same uncertainty over all measurement 
+    e->setInformation(0.05*Eigen::Matrix<double, 1, 1>::Identity()); //TODO-msm here we assume the same uncertainty over all measurement 
     e->setVertex(0,optimizer.vertex(frameID));
     e->setLandmark(ToA::sBsPositions[lm_id-1]);
-    // e->setRobustKernel(new g2o::RobustKernelHuber());
+    e->setRobustKernel(new g2o::RobustKernelHuber());
     optimizer.addEdge(e);  
 }}
 
 };
 
-static void OptimizeToa(int frameID, std::vector<double> vToa,  g2o::SparseOptimizer& optimizer)
+static void OptimizeGps(int frameID, std::vector<double> vToa,  g2o::SparseOptimizer& optimizer, bool bSim3 = true)
 {
-
-int lm_id = 0;       
-for (auto& m : vToa) {
-    lm_id ++;
-    // g2o::VertexXYZ* e = new g2o::EdgeSE3XYZ();
-    ToaEdgeUnary* e = new ToaEdgeUnary();
-    e->setMeasurement(m); 
-    e->setInformation(0.01*Eigen::Matrix<double, 1, 1>::Identity()); //TODO-msm here we assume the same uncertainty over all measurement 
+ 
+if(bSim3){ 
+    GpsSim3edge* e = new GpsSim3edge();
+    e->setMeasurement(vToa); 
+    e->setInformation(0.05*Eigen::Matrix<double, 3, 3>::Identity()); //TODO-msm here we assume the same uncertainty over all measurement 
     e->setVertex(0,optimizer.vertex(frameID));
-    e->setLandmark(ToA::sBsPositions[lm_id-1]);
     e->setRobustKernel(new g2o::RobustKernelHuber());
-    optimizer.addEdge(e);   
-}
-
+    optimizer.addEdge(e);  
+    } else{ int ss = 9;}
 };
+
 
 // /////////////////////////////////////////////////////////////////////////
 // ////////////////////my own code/////////////////////////////////////////
@@ -392,6 +428,7 @@ void Optimizer::BundleAdjustment(const vector<KeyFrame *> &vpKFs, const vector<M
         vSE3->setId(pKF->mnId);
         vSE3->setFixed(pKF->mnId==pMap->GetInitKFid());
         optimizer.addVertex(vSE3);
+        OptimizeToa(pKF->mnId, pKF->vToa_ , optimizer, false);
         if(pKF->mnId>maxKFid)
             maxKFid=pKF->mnId;
     }
@@ -1127,7 +1164,7 @@ int Optimizer::PoseOptimization(Frame *pFrame)
 
 
 ////////////////////////////////////////////////////////////////////////
-// OptimizeToa(0, pFrame->vToa_ , optimizer, false);
+OptimizeToa(0, pFrame->vToa_ , optimizer, false);
 // ////////////////////my own code/////////////////////////////////////////
 // // This is for adding bs nodes with negative ID and binary edges
 //     int bs_counter = 0;
@@ -1891,6 +1928,8 @@ void Optimizer::OptimizeEssentialGraph(Map* pMap, KeyFrame* pLoopKF, KeyFrame* p
         vZvectors[nIDi]=vScw[nIDi].rotation()*z_vec; // For debugging
 
         vpVertices[nIDi]=VSim3;
+
+        OptimizeToa(nIDi, pKF->vToa_ , optimizer, true);
     }
 
 
@@ -2234,7 +2273,9 @@ void Optimizer::OptimizeEssentialGraph(KeyFrame* pCurKF, vector<KeyFrame*> &vpFi
 
         vpGoodPose[nIDi] = false;
         vpBadPose[nIDi] = true;
-        OptimizeToa(nIDi, pKFi->vToa_ , optimizer, false);
+        cout<<"Adding kf to essential node for optmization: "<<endl;
+        OptimizeToa(nIDi, pKFi->vToa_ , optimizer, true);
+        // OptimizeGps(nIDi, pKFi->vToa_ , optimizer, true);
     }
 
     vector<KeyFrame*> vpKFs;
@@ -2379,6 +2420,7 @@ void Optimizer::OptimizeEssentialGraph(KeyFrame* pCurKF, vector<KeyFrame*> &vpFi
     }
 
     // Optimize!
+    cout<<"Optimizing Essential Graph, vertices: "<<endl;
     optimizer.initializeOptimization();
     optimizer.optimize(20);
 
@@ -2929,7 +2971,7 @@ void Optimizer::LocalInertialBA(KeyFrame *pKF, bool *pbStopFlag, Map *pMap, int&
     //We just add toa factor to non-fixed Keyfram
     //seems that fixed keyframe just can be used to imporve the mapping
     //as we do not localize BS (radio map), we do not use it here
-    // OptimizeToa(pKFi->mnId, pKFi->vToa_ , optimizer, false);
+    OptimizeToa(pKFi->mnId, pKFi->vToa_ , optimizer, false);
     // ////////////////////my own code/////////////////////////////////////////
 
         if(!pKFi->mPrevKF)
@@ -3917,7 +3959,7 @@ void Optimizer::LocalBundleAdjustment(KeyFrame* pMainKF,vector<KeyFrame*> vpAdju
     //seems that fixed keyframe just can be used to imporve the mapping
     //as we do not localize BS (radio map), we do not use it here
 
-    // OptimizeToa(pKFi->mnId, pKFi->vToa_ , optimizer, false);
+    OptimizeToa(pKFi->mnId, pKFi->vToa_ , optimizer, false);
     // ////////////////////my own code/////////////////////////////////////////
         set<MapPoint*> spViewMPs = pKFi->GetMapPoints();
         for(MapPoint* pMPi : spViewMPs)
@@ -4883,7 +4925,7 @@ int Optimizer::PoseInertialOptimizationLastKeyFrame(Frame *pFrame, bool bRecInit
     const float thHuberStereo = sqrt(7.815);
 
 ////////////////////////////////////////////////////////////////////////
-// OptimizeToa(0, pFrame->vToa_ , optimizer, false);
+OptimizeToa(0, pFrame->vToa_ , optimizer, false);
 // ////////////////////my own code//////////////////////////////////////
 
     {
@@ -5271,7 +5313,7 @@ int Optimizer::PoseInertialOptimizationLastFrame(Frame *pFrame, bool bRecInit)
     const float thHuberStereo = sqrt(7.815);
 
 ////////////////////////////////////////////////////////////////////////
-// OptimizeToa(0, pFrame->vToa_ , optimizer, false);
+OptimizeToa(0, pFrame->vToa_ , optimizer, false);
 // ////////////////////my own code/////////////////////////////////////////
 
     {

@@ -22,10 +22,9 @@ void LoadIMU(const string &strImuPath, vector<double> &vTimeStamps, vector<cv::P
 
 void LoadTOA(const string strToaPath, vector<double> &vTimeStamps,  vector<vector<double>> &vToa,  int Bs_num) ;
 
-// std::vector<std::vector<double>> ORB_SLAM3::ToA::sBsPositions = {{6,	7, 5}, {-26,-70, 10}, {-120,	40,	15}};
-std::vector<std::vector<double>> ORB_SLAM3::ToA::sBsPositions = {{5, 6, 3}, {-6, 15, 5}, {10, -3, 8}};
 
-
+// std::vector<std::vector<double>> ORB_SLAM3::ToA::sBsPositions = {{5, 6, 3}, {-6, 15, 5}, {10, -3, 8}};
+// ORB_SLAM3::ToA::sBsPositions = {{-0.33417888,  5.30332756,  9.21750544}, {-1.58969631, -7.41698016, 15.74571016}, {7.55860966, 11.76619995,  4.02761977}};
 double ttrack_tot = 0;
 int main(int argc, char *argv[])
 {
@@ -46,8 +45,38 @@ int main(int argc, char *argv[])
         cout << "file name: " << file_name << endl;
     }
 
-    // const vector<vector<double>> bs_positions = {{1, 20, 3}, {4, 50, 6}, {7, 80, 9}};
-     ORB_SLAM3::ToA::sBsPositions = {{5, 6, 3}, {-6, 15, 5}, {10, -3, 8}};
+   // //TODO: Here we are setting manually the intial pose of the camera just for V101;
+
+
+    //This is the sBsPositions in global coordinates (vicon coordinates) and need constant transformation.
+    //  ORB_SLAM3::ToA::sBsPositions = {{5, 6, 3}, {-6, 15, 5}, {10, -3, 8}};
+    // This is the starting GT for V101
+    // // [ 0.44918055  0.33365717  0.63383822 -0.53400266 -2.15233262 -1.34869269  0.16469092]
+   // Eigen::Quaterniond q(0.44918055,  0.33365717,  0.63383822, 0.53400266);
+   // Eigen::Vector3d t(-2.15233262, -1.34869269,  0.16469092);
+
+   //Now we transformt the landmarks based on the first GT to start frame which is orgigi
+//    T =  [[-0.02615429  0.97668646  0.21306244 -2.15233262]
+//          [-0.37719641 -0.20702787  0.90269306 -1.34869269]
+//          [ 0.92576683 -0.05675583  0.37381866  0.16469092]
+//          [ 0.          0.          0.          1.        ]]
+         
+//    T^-1 = [[-0.02615786 -0.37719723  0.92576056 -0.71748792]
+//            [ 0.9766891  -0.20702368 -0.05675725  1.83229589]
+//            [ 0.21306823  0.90270206  0.37381835  1.61449688]
+//            [ 0.          0.          0.          1.        ]]
+        //   This is the landmark with constant transfromation 
+        //    [-0.33417888  5.30332756  9.21750544]
+        //   This is the landmark with constant transfromation 
+        //    [-1.58969631 -7.41698016 15.74571016]
+        //   This is the landmark with constant transfromation 
+        //    [ 7.55860966 11.76619995  4.02761977]
+
+
+    ORB_SLAM3::ToA::sBsPositions = {{-0.33417888,  5.30332756,  9.21750544}, {-1.58969631, -7.41698016, 15.74571016}, {7.55860966, 11.76619995,  4.02761977}};
+   // mInitialFrame.SetPose(Sophus::SE3f(q.cast<float>(), t.cast<float>()));
+
+
 
     // Load all sequences:
     int seq;
@@ -218,7 +247,13 @@ int main(int argc, char *argv[])
 
             // Pass the image to the SLAM system
             // cout << "tframe = " << tframe << endl;
-             if (abs(tframe - vTimestampsToa[seq][toaMeas_ind[seq]]) < 0.1 ){
+            
+            // std::cout<< "vtoa in mono_inertial"<<vToaAll[seq][toaMeas_ind[seq]][0]<<endl;
+            // std::cout<< "vtoa in mono_inertial"<<vToaAll[seq][toaMeas_ind[seq]][1]<<endl;
+            // std::cout<< "vtoa in mono_inertial"<<vToaAll[seq][toaMeas_ind[seq]][2]<<endl;
+            // std::cout<< "vtoa in mono_inertial"<<vToaAll[seq][toaMeas_ind[seq]][3]<<endl;
+            // std::cout<<"/////////////////////////////////////////////////////////"<<endl;
+             if (abs(tframe - vTimestampsToa[seq][toaMeas_ind[seq]]) < 0.01 ){
             SLAM.TrackMonocularToa(im,tframe, vToaAll[seq][toaMeas_ind[seq]], vImuMeas); // TODO change to monocular_inertial
             }else{
                  SLAM.TrackMonocularToa(im,tframe, vector<double>(1,0), vImuMeas);

@@ -1565,6 +1565,7 @@ Sophus::SE3f Tracking::GrabImageRGBD(const cv::Mat &imRGB,const cv::Mat &imD, co
 
 Sophus::SE3f Tracking::GrabImageMonocular(const cv::Mat &im, const double &timestamp, string filename, const vector<double>& vToa)
 {
+
     mImGray = im;
     if(mImGray.channels()==3)
     {
@@ -1583,8 +1584,17 @@ Sophus::SE3f Tracking::GrabImageMonocular(const cv::Mat &im, const double &times
 
     if (mSensor == System::MONOCULAR)
     {
-        if(mState==NOT_INITIALIZED || mState==NO_IMAGES_YET ||(lastID - initID) < mMaxFrames)
+        if(mState==NOT_INITIALIZED || mState==NO_IMAGES_YET ||(lastID - initID) < mMaxFrames){
             mCurrentFrame = Frame(mImGray,timestamp,mpIniORBextractor,mpORBVocabulary,mpCamera,mDistCoef,mbf,mThDepth,(ORB_SLAM3::Frame *)__null, ORB_SLAM3::IMU::Calib(), vToa);
+            // TODO: Here we are setting manually the intial pose of the camera just for V101;
+            // [-2.15233262 -1.34869269  0.16469092  0.44918055  0.33365717  0.63383822 0.53400266]
+            // Eigen::Quaterniond q(0.44918055,  0.33365717,  0.63383822, 0.53400266);
+            // Eigen::Vector3d t(-2.15233262, -1.34869269,  0.16469092);
+            // mCurrentFrame.SetPose(Sophus::SE3f(q.cast<float>(), t.cast<float>()));
+            // cout<<"current frame ID iniit"<<mCurrentFrame.mnId<<endl;
+            // cout << "Current frame pose initi: " << mCurrentFrame.GetPose().matrix() << endl;
+
+            }
         else
             mCurrentFrame = Frame(mImGray,timestamp,mpORBextractorLeft,mpORBVocabulary,mpCamera,mDistCoef,mbf,mThDepth, (ORB_SLAM3::Frame *)__null, ORB_SLAM3::IMU::Calib(), vToa);
     }
@@ -1593,6 +1603,7 @@ Sophus::SE3f Tracking::GrabImageMonocular(const cv::Mat &im, const double &times
         if(mState==NOT_INITIALIZED || mState==NO_IMAGES_YET)
         {
             mCurrentFrame = Frame(mImGray,timestamp,mpIniORBextractor,mpORBVocabulary,mpCamera,mDistCoef,mbf,mThDepth,&mLastFrame,*mpImuCalib, vToa);
+            
         }
         else
             mCurrentFrame = Frame(mImGray,timestamp,mpORBextractorLeft,mpORBVocabulary,mpCamera,mDistCoef,mbf,mThDepth,&mLastFrame,*mpImuCalib, vToa);
@@ -1604,6 +1615,8 @@ Sophus::SE3f Tracking::GrabImageMonocular(const cv::Mat &im, const double &times
     mCurrentFrame.mNameFile = filename;
     mCurrentFrame.mnDataset = mnNumDataset;
 
+
+
 #ifdef REGISTER_TIMES
     vdORBExtract_ms.push_back(mCurrentFrame.mTimeORB_Ext);
 #endif
@@ -1612,6 +1625,7 @@ Sophus::SE3f Tracking::GrabImageMonocular(const cv::Mat &im, const double &times
     Track();
 
     return mCurrentFrame.GetPose();
+
 }
 
 
@@ -2512,6 +2526,12 @@ void Tracking::MonocularInitialization()
             }
 
             // Set Frame Poses
+            // //TODO: Here we are setting manually the intial pose of the camera just for V101;
+            // // [ 0.44918055  0.33365717  0.63383822 -0.53400266 -2.15233262 -1.34869269  0.16469092]
+            // Eigen::Quaterniond q(0.44918055,  0.33365717,  0.63383822, 0.53400266);
+            // Eigen::Vector3d t(-2.15233262, -1.34869269,  0.16469092);
+            // mInitialFrame.SetPose(Sophus::SE3f(q.cast<float>(), t.cast<float>()));
+
             mInitialFrame.SetPose(Sophus::SE3f());
             mCurrentFrame.SetPose(Tcw);
 
