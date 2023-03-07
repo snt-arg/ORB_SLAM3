@@ -65,15 +65,16 @@ int main(int argc, char *argv[])
 //            [ 0.9766891  -0.20702368 -0.05675725  1.83229589]
 //            [ 0.21306823  0.90270206  0.37381835  1.61449688]
 //            [ 0.          0.          0.          1.        ]]
-        //   This is the landmark with constant transfromation 
-        //    [-0.33417888  5.30332756  9.21750544]
-        //   This is the landmark with constant transfromation 
-        //    [-1.58969631 -7.41698016 15.74571016]
-        //   This is the landmark with constant transfromation 
-        //    [ 7.55860966 11.76619995  4.02761977]
+//  [ 4.24863971 -3.3866435  -2.56994598]
+// This is the landmark with constant transfromation 
+//  [ -6.76359289 -11.44211831  -7.02416408]
+// This is the landmark with constant transfromation 
+//  [ 9.59806666  6.38803007 -5.1851683 ]
 
 
-    ORB_SLAM3::ToA::sBsPositions = {{-0.33417888,  5.30332756,  9.21750544}, {-1.58969631, -7.41698016, 15.74571016}, {7.55860966, 11.76619995,  4.02761977}};
+
+
+    ORB_SLAM3::ToA::sBsPositions = {{4.24863971, -3.3866435,  -2.56994598}, {-6.76359289, -11.44211831,  -7.02416408}, {9.59806666,  6.38803007, -5.1851683 }};
    // mInitialFrame.SetPose(Sophus::SE3f(q.cast<float>(), t.cast<float>()));
 
 

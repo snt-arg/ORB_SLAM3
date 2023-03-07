@@ -22,7 +22,7 @@ python evaluation/convert_tum_format.py
 # evo_traj tum OUTPUT_FILE1 -p --plot_mode xy 
 
 echo "Evaluation for ORB-SLAM3 with TOA included"
-evo_ape euroc $DATA_FILE $OUTPUT_FILE1 -va --plot --plot_mode xy --save_results "$ROOT_DIR/results/ORB.zip" --t_max_diff 0.005 --plot_full_ref   -s 
+evo_ape euroc $DATA_FILE $OUTPUT_FILE1 -va --plot --plot_mode xy --save_results "$ROOT_DIR/results/ORB.zip" --t_max_diff 0.005 --plot_full_ref    
 
 echo "Evaluation for ORB-SLAM3 with just monocular images"
-evo_ape euroc $DATA_FILE $OUTPUT_FILE2 -va --plot --plot_mode xy --save_results "$ROOT_DIR/results/ORB.zip" --t_max_diff 0.005 --plot_full_ref -s   
+evo_ape euroc $DATA_FILE $OUTPUT_FILE2 -va --plot --plot_mode xy --save_results "$ROOT_DIR/results/ORB.zip" --t_max_diff 0.005 --plot_full_ref    
