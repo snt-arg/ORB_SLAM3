@@ -23,8 +23,6 @@ void LoadIMU(const string &strImuPath, vector<double> &vTimeStamps, vector<cv::P
 void LoadTOA(const string strToaPath, vector<double> &vTimeStamps,  vector<vector<double>> &vToa,  int Bs_num) ;
 
 
-// std::vector<std::vector<double>> ORB_SLAM3::ToA::sBsPositions = {{5, 6, 3}, {-6, 15, 5}, {10, -3, 8}};
-// ORB_SLAM3::ToA::sBsPositions = {{-0.33417888,  5.30332756,  9.21750544}, {-1.58969631, -7.41698016, 15.74571016}, {7.55860966, 11.76619995,  4.02761977}};
 double ttrack_tot = 0;
 int main(int argc, char *argv[])
 {
@@ -65,16 +63,17 @@ int main(int argc, char *argv[])
 //            [ 0.9766891  -0.20702368 -0.05675725  1.83229589]
 //            [ 0.21306823  0.90270206  0.37381835  1.61449688]
 //            [ 0.          0.          0.          1.        ]]
-//  [ 4.24863971 -3.3866435  -2.56994598]
+//  [ 3.68411801 -2.66003725  3.87489599]
 // This is the landmark with constant transfromation 
-//  [ -6.76359289 -11.44211831  -7.02416408]
+//  [  2.30698127 -14.11211257  -4.66638405]
 // This is the landmark with constant transfromation 
-//  [ 9.59806666  6.38803007 -5.1851683 ]
+//  [9.32562876 7.2856183  4.38213516]
 
 
 
 
-    ORB_SLAM3::ToA::sBsPositions = {{4.24863971, -3.3866435,  -2.56994598}, {-6.76359289, -11.44211831,  -7.02416408}, {9.59806666,  6.38803007, -5.1851683 }};
+
+    ORB_SLAM3::ToA::sBsPositions = {{ 3.68411801, -2.66003725,  3.87489599}, {2.30698127, -14.11211257,  -4.66638405}, {9.32562876, 7.2856183,  4.38213516}};
    // mInitialFrame.SetPose(Sophus::SE3f(q.cast<float>(), t.cast<float>()));
 
 
@@ -159,7 +158,7 @@ int main(int argc, char *argv[])
 
     // Create SLAM system. It initializes all system threads and gets ready to process frames.
     //ORB_SLAM3::System SLAM(argv[1],argv[2],ORB_SLAM3::System::IMU_MONOCULAR, true); 
-    ORB_SLAM3::System SLAM(argv[1],argv[2],ORB_SLAM3::System::MONOCULAR, true); 
+    ORB_SLAM3::System SLAM(argv[1],argv[2],ORB_SLAM3::System::IMU_MONOCULAR, true); 
     //TODO the sensor must be changed to IMU_MONOCULAR_TOA
     float imageScale = SLAM.GetImageScale();
 

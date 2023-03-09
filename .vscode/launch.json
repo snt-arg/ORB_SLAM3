@@ -17,8 +17,8 @@
             // "args": ["${workspaceFolder}/Vocabulary/ORBvoc.txt", "${workspaceFolder}/Examples/Monocular-Inertial/EuRoC.yaml", "${workspaceFolder}/Datasets/EuRoC/V102", "${workspaceFolder}/Examples/Monocular-Inertial/EuRoC_TimeStamps/V102.txt", "V102_monotoa"],
 
 
-            "program": "${workspaceFolder}/Examples/Monocular-Inertial/mono_inertial_toa_euroc",
-            // "program": "${workspaceFolder}/Examples/Monocular/toa_test",
+            // "program": "${workspaceFolder}/Examples/Monocular-Inertial/mono_inertial_toa_euroc",
+            "program": "${workspaceFolder}/Examples/Monocular/test_toa_factor",
            "args": ["${workspaceFolder}/Vocabulary/ORBvoc.txt", "${workspaceFolder}/Examples/Monocular/EuRoC.yaml", "${workspaceFolder}/Datasets/EuRoC/V101", "${workspaceFolder}/Examples/Monocular/EuRoC_TimeStamps/V101.txt", "V101_monotoa"],
 
             "stopAtEntry": false,

@@ -29,35 +29,27 @@
 
 using namespace ORB_SLAM3;
 using namespace std;
-
 class ToaEdgeUnary : public g2o::BaseUnaryEdge<1, double, g2o::VertexSE3Expmap> {
+
 public:
     ToaEdgeUnary() {}
-    void computeError() override {
+    void computeError() override {  
         const g2o::VertexSE3Expmap* v = static_cast<const g2o::VertexSE3Expmap*>(_vertices[0]);
-        double dEst = (v->estimate().inverse().map(_landmark)).norm();
-        cout<<"dEst: "<<dEst<<endl;
-        // _error[0] = dEst - _measurement;
-        _error[0] = v->estimate().translation().norm() - _measurement;
-    }
+        const Eigen::Vector3d& translation = v->estimate().translation();
+        double dEst = (translation - _landmark ).norm();
+        _error[0] = dEst - _measurement;
+        cout<<"This is the landmark unary: "<<_landmark<<endl;
+        cout<<"This is the translation: "<<translation<<endl;
+        cout<<"This is the measurement: "<<_measurement<<endl;
+        cout<<"dEst TOAEdge unary: "<<dEst<<endl;
+        cout<<"_error: "<<_error[0]<<endl;
+        cout<<"---------------------------------"<<endl;
+        }
 
-    bool read(std::istream& is) override {
-        is >> _measurement;
-        is >> _landmark(0);
-        is >> _landmark(1);
-        is >> _landmark(2);
-        return true;
-    }
-    bool write(std::ostream& os) const override {
-        os << _measurement << " ";
-        os << _landmark(0) << " ";
-        os << _landmark(1) << " ";
-        os << _landmark(2) << " ";
-        return true;
-    }
 
-    // bool read(istream& is) override { return true; }
-    // bool write(ostream& os) const override { return true; }
+    bool read(istream& is) override { return true; }
+    bool write(ostream& os) const override { return true; }
+
     void setLandmark(vector<double> landmark) { _landmark = Eigen::Vector3d(landmark[0], landmark[1], landmark[2]); }
     void setMeasurement(double measurement) { _measurement = measurement; }
 
@@ -65,7 +57,6 @@ private:
     double _measurement;
     Eigen::Vector3d _landmark;
 };
-
 
 
 
@@ -184,8 +175,8 @@ for (int i = 0; i<4; i++)
     g2o::BlockSolverX * solver_ptr = new g2o::BlockSolverX(linearSolver);
 
     g2o::OptimizationAlgorithmLevenberg* solver = new g2o::OptimizationAlgorithmLevenberg(solver_ptr); 
-    optimizer.setAlgorithm(solver);
-    optimizer.setVerbose(true);
+    // optimizer.setAlgorithm(solver);
+    // optimizer.setVerbose(false);
 
 
     // solver->setUserLambdaInit(1e-16);
@@ -195,12 +186,12 @@ for (int i = 0; i<4; i++)
     
 
     //add vertex
-    // g2o::VertexSE3Expmap* v = new g2o::VertexSE3Expmap();
-    g2o::VertexSim3Expmap* v = new g2o::VertexSim3Expmap();
+    g2o::VertexSE3Expmap* v = new g2o::VertexSE3Expmap();
+    // g2o::VertexSim3Expmap* v = new g2o::VertexSim3Expmap();
     // ORB_SLAM3::VertexSim3Expmap * vSim3 = new ORB_SLAM3::VertexSim3Expmap();
 
     v->setId(0);
-    // v->setEstimate(g2o::SE3Quat());
+    v->setEstimate(g2o::SE3Quat());
     // v->setEstimate(g2o::Sim3());
     // v->setMarginalized(false);
     // v->_fix_scale = true;
@@ -221,8 +212,8 @@ for (int i = 0; i<4; i++)
     for (auto& m: meas){
     cout<<"this is m"<<m<<endl;
     // cout<<l_vec[j]<<endl;
-    // ToaEdgeUnary* e = new ToaEdgeUnary();
-    TOASim3edge* e = new TOASim3edge();
+    ToaEdgeUnary* e = new ToaEdgeUnary();
+    // TOASim3edge* e = new TOASim3edge();
     e->setMeasurement(m); 
     e->setLandmark(l_vec[j]);
     e->setInformation(0.01*Eigen::Matrix<double, 1, 1>::Identity()); //TODO-msm here we assume the same uncertainty over all measurement 
@@ -237,17 +228,17 @@ for (int i = 0; i<4; i++)
 // Print the estimate of the VertexSE3Expmap with index 0
 g2o::OptimizableGraph::Vertex* vv = optimizer.vertex(0);
 
-// g2o::VertexSE3Expmap* vSE3 = dynamic_cast<g2o::VertexSE3Expmap*>(vv);
-g2o::VertexSim3Expmap* vSE3 = dynamic_cast<g2o::VertexSim3Expmap*>(vv);
+g2o::VertexSE3Expmap* vSE3 = dynamic_cast<g2o::VertexSE3Expmap*>(vv);
+// g2o::VertexSim3Expmap* vSE3 = dynamic_cast<g2o::VertexSim3Expmap*>(vv);
 cout<<"this is the real pose"<< t1.transpose()<<endl;
 cout << "Vertex 0 estimate before optimization: " << vSE3->estimate() << endl;
 cout << "Vertex 0 estimate before optimization: " << vSE3->estimate().translation().transpose() << endl;
 
     // Optimize the graph
     optimizer.initializeOptimization();
-    optimizer.computeActiveErrors();
+    // optimizer.computeActiveErrors();
     optimizer.optimize(20);
-    optimizer.computeActiveErrors();
+    // optimizer.computeActiveErrors();
 
 
 cout << "Vertex 0 estimate after optimization: " << vSE3->estimate().translation().transpose()<< endl;

@@ -273,7 +273,55 @@ public:
     Eigen::Vector3d _landmark;
 };
 
+///////////////////////////////////////////////////////////////////////////////////////////////////////
+class TOAVertexPose : public g2o::BaseUnaryEdge<1, double, ORB_SLAM3::VertexPose> {
 
+public:
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+    TOAVertexPose() {}
+
+    void computeError() override {
+        
+        // VertexPose* VP = static_cast<VertexPose*>(optimizer.vertex(pKFi->mnId))
+        //Sophus::SE3f Tcw(VP->estimate().Rcw[0].cast<float>(), VP->estimate().tcw[0].cast<float>());
+
+        const ORB_SLAM3::VertexPose* VP = static_cast<const ORB_SLAM3::VertexPose*>(_vertices[0]);
+        auto& translation = VP->estimate().tcw[0].cast<double>();
+
+        double dEst = (translation - _landmark.cast<double>()).norm();
+        _error[0] = dEst - _measurement;
+
+
+        std::cout<<"This is the landmark: "<<_landmark<<endl;
+        std::cout<<"This is the translation: "<<translation<<endl;
+        std::cout<<"This is the measurement: "<<_measurement<<endl;
+        std::cout<<"dEst TOAEdge SIM3: "<<dEst<<endl;
+        std::cout<<"_error: "<<_error[0]<<endl;
+        
+    }
+
+    bool read(std::istream& is) override {
+        is >> _measurement;
+        is >> _landmark(0);
+        is >> _landmark(1);
+        is >> _landmark(2);
+        return true;
+    }
+    bool write(std::ostream& os) const override {
+        os << _measurement << " ";
+        os << _landmark(0) << " ";
+        os << _landmark(1) << " ";
+        os << _landmark(2) << " ";
+        return true;
+    }
+    // void setLandmark(vector<double> landmark) { _landmark = Eigen::Vector4f(landmark[0], landmark[1], landmark[2], 1); }
+    void setLandmark(vector<double> landmark) { _landmark = Eigen::Vector3d(landmark[0], landmark[1], landmark[2]); }
+    void setMeasurement(double measurement) { _measurement = measurement; }
+    private:
+    double _measurement;
+    Eigen::Vector3d _landmark;
+};
+///////////////////////////////////////////////////////////////////////////////////////////////////////
 class GpsSim3edge : public g2o::BaseUnaryEdge<3, Eigen::Vector3d, g2o::VertexSim3Expmap> {
 
 public:
@@ -293,6 +341,30 @@ public:
     private:
     Eigen::Vector3d _measurement;
 };
+
+// ///////////////////////////////////////////////////////////////////////////////////////////
+////////////////////my own code/////////////////////////////////////////
+static void OptimizeToa_vert(int frameID, std::vector<double> vToa,  g2o::SparseOptimizer& optimizer, bool bSim3 = true)
+{
+    // cout<<"frameID: "<<frameID<<endl;
+    // cout<<"Vtoa: "<<vToa[1]<<endl;
+    // cout<<"Vtoa: "<<vToa[2]<<endl;
+    // cout<<"Vtoa: "<<vToa[3]<<endl;
+ optimizer.setVerbose(true);
+int lm_id = 0;   
+for (auto& m : vToa) {
+    lm_id ++;
+    // cout<<"this is the measurement: "<<m<<endl;
+    TOAVertexPose* e = new TOAVertexPose();
+    e->setMeasurement(m); 
+    e->setInformation(0.01*Eigen::Matrix<double, 1, 1>::Identity()); //TODO-msm here we assume the same uncertainty over all measurement 
+    e->setVertex(0,optimizer.vertex(frameID));
+    e->setLandmark(ToA::sBsPositions[lm_id-1]);
+    // e->setRobustKernel(new g2o::RobustKernelHuber());
+    optimizer.addEdge(e);   
+}
+}
+
 // ///////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////my own code/////////////////////////////////////////
 static void OptimizeToa(int frameID, std::vector<double> vToa,  g2o::SparseOptimizer& optimizer, bool bSim3 = true)
@@ -428,7 +500,9 @@ void Optimizer::BundleAdjustment(const vector<KeyFrame *> &vpKFs, const vector<M
         vSE3->setId(pKF->mnId);
         vSE3->setFixed(pKF->mnId==pMap->GetInitKFid());
         optimizer.addVertex(vSE3);
+        //TODO-msm: bundleAdjustment 
         OptimizeToa(pKF->mnId, pKF->vToa_ , optimizer, false);
+
         if(pKF->mnId>maxKFid)
             maxKFid=pKF->mnId;
     }
@@ -696,6 +770,7 @@ void Optimizer::BundleAdjustment(const vector<KeyFrame *> &vpKFs, const vector<M
 
 void Optimizer::FullInertialBA(Map *pMap, int its, const bool bFixLocal, const long unsigned int nLoopId, bool *pbStopFlag, bool bInit, float priorG, float priorA, Eigen::VectorXd *vSingVal, bool *bHess)
 {
+    cout<<"FullInertialBA"<<endl;
     long unsigned int maxKFid = pMap->GetMaxKFid();
     const vector<KeyFrame*> vpKFs = pMap->GetAllKeyFrames();
     const vector<MapPoint*> vpMPs = pMap->GetAllMapPoints();
@@ -737,6 +812,8 @@ void Optimizer::FullInertialBA(Map *pMap, int its, const bool bFixLocal, const l
             VP->setFixed(bFixed);
         }
         optimizer.addVertex(VP);
+
+       OptimizeToa_vert(pKFi->mnId, pKFi->vToa_,  optimizer,  true);
 
         if(pKFi->bImu)
         {
@@ -1583,6 +1660,10 @@ void Optimizer::LocalBundleAdjustment(KeyFrame *pKF, bool* pbStopFlag, Map* pMap
         vSE3->setId(pKFi->mnId);
         vSE3->setFixed(pKFi->mnId==pMap->GetInitKFid());
         optimizer.addVertex(vSE3);
+
+        //TODO-msm: localBundleAdjustment:
+        // OptimizeToa(pKFi->mnId, pKFi->vToa_ , optimizer, false);
+
         if(pKFi->mnId>maxKFid)
             maxKFid=pKFi->mnId;
         // DEBUG LBA
@@ -1929,7 +2010,8 @@ void Optimizer::OptimizeEssentialGraph(Map* pMap, KeyFrame* pLoopKF, KeyFrame* p
 
         vpVertices[nIDi]=VSim3;
 
-        OptimizeToa(nIDi, pKF->vToa_ , optimizer, true);
+        //TODO-msm: optimize Essential graph Sim3
+        // OptimizeToa(nIDi, pKF->vToa_ , optimizer, true);
     }
 
 
@@ -2274,8 +2356,10 @@ void Optimizer::OptimizeEssentialGraph(KeyFrame* pCurKF, vector<KeyFrame*> &vpFi
         vpGoodPose[nIDi] = false;
         vpBadPose[nIDi] = true;
         cout<<"Adding kf to essential node for optmization: "<<endl;
-        OptimizeToa(nIDi, pKFi->vToa_ , optimizer, true);
-        // OptimizeGps(nIDi, pKFi->vToa_ , optimizer, true);
+
+        //TODO-msm: need to check if I need to add the toaoptimzier or not
+        //OptimizeEssentialGraph
+        // OptimizeToa(nIDi, pKFi->vToa_ , optimizer, true);
     }
 
     vector<KeyFrame*> vpKFs;
@@ -2971,7 +3055,8 @@ void Optimizer::LocalInertialBA(KeyFrame *pKF, bool *pbStopFlag, Map *pMap, int&
     //We just add toa factor to non-fixed Keyfram
     //seems that fixed keyframe just can be used to imporve the mapping
     //as we do not localize BS (radio map), we do not use it here
-    OptimizeToa(pKFi->mnId, pKFi->vToa_ , optimizer, false);
+    //TODO-msm: localInertialBA
+    // OptimizeToa(pKFi->mnId, pKFi->vToa_ , optimizer, false);
     // ////////////////////my own code/////////////////////////////////////////
 
         if(!pKFi->mPrevKF)
@@ -3959,6 +4044,7 @@ void Optimizer::LocalBundleAdjustment(KeyFrame* pMainKF,vector<KeyFrame*> vpAdju
     //seems that fixed keyframe just can be used to imporve the mapping
     //as we do not localize BS (radio map), we do not use it here
 
+    //TODO-msm: LocalBundleAdjsutment 
     OptimizeToa(pKFi->mnId, pKFi->vToa_ , optimizer, false);
     // ////////////////////my own code/////////////////////////////////////////
         set<MapPoint*> spViewMPs = pKFi->GetMapPoints();
@@ -4925,7 +5011,8 @@ int Optimizer::PoseInertialOptimizationLastKeyFrame(Frame *pFrame, bool bRecInit
     const float thHuberStereo = sqrt(7.815);
 
 ////////////////////////////////////////////////////////////////////////
-OptimizeToa(0, pFrame->vToa_ , optimizer, false);
+//TODO-msm:poseinertialOPtimizationLastKeyframe
+// OptimizeToa(0, pFrame->vToa_ , optimizer, false);
 // ////////////////////my own code//////////////////////////////////////
 
     {
@@ -5313,7 +5400,8 @@ int Optimizer::PoseInertialOptimizationLastFrame(Frame *pFrame, bool bRecInit)
     const float thHuberStereo = sqrt(7.815);
 
 ////////////////////////////////////////////////////////////////////////
-OptimizeToa(0, pFrame->vToa_ , optimizer, false);
+//TODO-msm: PoseinerialOptimizationLastFrame
+// OptimizeToa(0, pFrame->vToa_ , optimizer, false);
 // ////////////////////my own code/////////////////////////////////////////
 
     {

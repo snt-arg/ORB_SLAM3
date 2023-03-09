@@ -3,6 +3,7 @@ import csv
 import numpy as np
 from scipy.spatial.transform import Rotation
 
+# This code assumes orbslam results are in camera 0 frame
 
 #The pose of Vicon wrt body frame
 TBV = np.array([[0.33638, -0.01749, 0.94156, 0.06901],
@@ -19,6 +20,13 @@ TBC = np.array([[0.0148655429818, -0.999880929698, 0.00414029679422, -0.02164014
 # TVC = TVB @ np.linalg.inv(TBC) 
 # TVC = TVB*TBC 
 TVC = np.linalg.inv(TBV)@TBC
+
+
+
+Tumeyama = np.array([[ 0.36852209,  0.24800063,  0.8959281,  0.83038384 ],
+ [ 0.09182906, -0.9687563,   0.23038806, 2.19203329],
+ [ 0.92507237, -0.00263085, -0.37978177, 1.05654092],
+ [0, 0,0 , 1]])
 
 # ground truth is vicon wrt the world:  gt_wv = pwv
 # So if we want to obtain the camera pose wrt the world frame of euroc
@@ -55,7 +63,7 @@ def calculate_distances(T_ORB_world, pose):
         lm = T_ORB_world@landmark_augment
         pose_aug = np.append(pose, 1)
         # calculate the pose of the camera wrt to the ORB frame (the first ground truth)
-        pose_aug_transformed = T_ORB_world@pose_aug@TVC
+        pose_aug_transformed = T_ORB_world@pose_aug
         distance = np.linalg.norm(pose_aug_transformed[:-1] - lm[:-1])
         distances.append(distance)
     return distances
@@ -76,10 +84,11 @@ with open('/home/meisam/ORB_SLAM3/Datasets/EuRoC/V101/mav0/vicon0/data.csv', 'r'
                 q = initpose[3:7]
                 t = initpose[0:3]
                 # Convert the quaternion to a 3x3 rotation matrix
-                R_world_ORB = Rotation.from_quat(q).as_matrix()
+                R_world_V0 = Rotation.from_quat(q).as_matrix()
                 # Create a 4x4 transformation matrix by combining the rotation matrix and translation vector
-                T_world_ORB = np.vstack([np.hstack([R_world_ORB, t[:, np.newaxis]]), np.array([0, 0, 0, 1])])
-                T_ORB_world = np.linalg.inv(T_world_ORB)
+                T_world_V0 = np.vstack([np.hstack([R_world_V0, t[:, np.newaxis]]), np.array([0, 0, 0, 1])])
+                T_world_C = T_world_V0@TVC
+                T_ORB_world = np.linalg.inv(T_world_C)
                 print("This is the T_ORB_world \n", T_ORB_world)
 
 
@@ -103,9 +112,10 @@ with open('/home/meisam/ORB_SLAM3/Datasets/EuRoC/V101/mav0/vicon0/data.csv', 'r'
 
 
 
-
+            T_ORB_world = np.linalg.inv(Tumeyama)
             # Calculate the distances from the pose to the landmarks
             distances = calculate_distances(T_ORB_world,pose_w)
+            
 
             # Write the timestamp and distances to the output file
             txtfile.write('{},{}\n'.format(timestamp, ','.join(str(x) for x in distances)))
@@ -117,6 +127,7 @@ for landmark in landmarks:
     landmark_augment = np.append(landmark, 1)
     lm = T_ORB_world@landmark_augment
     print("This is the landmark with constant transfromation \n", lm[:-1])
+print(T_ORB_world)    
 
 
 

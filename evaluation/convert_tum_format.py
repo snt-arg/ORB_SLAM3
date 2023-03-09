@@ -57,10 +57,11 @@ def convert_folders(input_folder, output_folder):
 
 # example usage
 input_folder1 = "/home/meisam/ORB_SLAM3/Results"
-input_folder2 = "/home/meisam/ORB_SLAM3/Results_baseline"
+input_folder2 = "/home/meisam/ORB_SLAM3/Results_baseline/euroc_mono"
+input_folder2 = "/home/meisam/ORB_SLAM3/Results_baseline/euroc_inertial"
 folders = (input_folder1, input_folder2)
 for in_folder in folders:
-    output_folder = "/home/meisam/ORB_SLAM3/results_tum_format"
+    output_folder = "/home/meisam/ORB_SLAM3/results_tum_format/inertial"
     convert_folders(in_folder, output_folder)
 
 
