@@ -43,6 +43,23 @@ Tumeyama = np.array([[ 0.36852209,  0.24800063,  0.8959281,  0.83038384 ],
 # 2) Landmarks:
     # LM_ORB = T_ORB_world* LM_world
 
+# define function that takes the (x,y,z, qw,qx,qy,qz) and returns the transformation matrix
+#This is for Just Euroc dataset format where qw is the first element
+def get_transformation_matrix(pose):
+    q = pose[3:7]
+    q_new = np.concatenate((q[1:], q[0].reshape(1,)))
+    t = pose[0:3]
+    # Convert the quaternion to a 3x3 rotation matrix
+    R = Rotation.from_quat(q_new ).as_matrix()
+    # Create a 4x4 transformation matrix by combining the rotation matrix and translation vector
+    T = np.vstack([np.hstack([R, t[:, np.newaxis]]), np.array([0, 0, 0, 1])])
+    return T
+# define a function that takes the transformation matrix and returns the (x,y,z, qw,qx,qy,qz)
+def get_pose_from_transformation_matrix(T):
+    q = Rotation.from_matrix(T[:3, :3]).as_quat()
+    t = T[:3, 3]
+    pose = np.hstack([t, q])
+    return pose
 
 
 
@@ -61,10 +78,12 @@ def calculate_distances(T_ORB_world, pose):
         landmark_augment = np.append(landmark, 1)
         # calculate the pose of landmarks wrt to the ORB frame (the first ground truth)
         lm = T_ORB_world@landmark_augment
-        pose_aug = np.append(pose, 1)
         # calculate the pose of the camera wrt to the ORB frame (the first ground truth)
-        pose_aug_transformed = T_ORB_world@pose_aug
-        distance = np.linalg.norm(pose_aug_transformed[:-1] - lm[:-1])
+        GT_wv =get_transformation_matrix(pose)
+        # GT_orb_w = T_ORB_world@GT_wv@TVC  
+        GT_orb_w = T_ORB_world@GT_wv@np.linalg.inv(TBV)
+        pose_final = get_pose_from_transformation_matrix(GT_orb_w)
+        distance = np.linalg.norm(pose_final [0:3] - lm[:-1])
         distances.append(distance)
     return distances
 
@@ -82,14 +101,22 @@ with open('/home/meisam/ORB_SLAM3/Datasets/EuRoC/V101/mav0/vicon0/data.csv', 'r'
             if i == 0:
                 initpose = np.array([float(x) for x in row[1:]])
                 q = initpose[3:7]
+                q_new = np.concatenate((q[1:], q[0].reshape(1,)))
                 t = initpose[0:3]
                 # Convert the quaternion to a 3x3 rotation matrix
-                R_world_V0 = Rotation.from_quat(q).as_matrix()
+                R_world_V0 = Rotation.from_quat(q_new).as_matrix()
                 # Create a 4x4 transformation matrix by combining the rotation matrix and translation vector
                 T_world_V0 = np.vstack([np.hstack([R_world_V0, t[:, np.newaxis]]), np.array([0, 0, 0, 1])])
-                T_world_C = T_world_V0@TVC
-                T_ORB_world = np.linalg.inv(T_world_C)
-                print("This is the T_ORB_world \n", T_ORB_world)
+                ######################################################
+                # If ORB is tracking the camera frame
+                # T_world_C0 = T_world_V0@TVC
+                # T_ORB_world = np.linalg.inv(T_world_C0)
+
+                T_world_B0 = T_world_V0@np.linalg.inv(TBV)
+                T_ORB_world = np.linalg.inv(T_world_B0)
+                #######################################################
+                
+                
 
 
                 # initipose_mat = TWC@ T2
@@ -102,7 +129,7 @@ with open('/home/meisam/ORB_SLAM3/Datasets/EuRoC/V101/mav0/vicon0/data.csv', 'r'
             # Parse the pose data from the row
             timestamp = row[0]
 
-            pose_w = np.array([float(x) for x in row[1:4]])
+            pose_w = np.array([float(x) for x in row[1:]])
             # pose_w_aug = np.append(pose_w, 1)
             # pose_c_aug = TWC@TWB@pose_w_aug
             # # pose_c_aug = TCB@pose_w_aug
@@ -112,7 +139,7 @@ with open('/home/meisam/ORB_SLAM3/Datasets/EuRoC/V101/mav0/vicon0/data.csv', 'r'
 
 
 
-            T_ORB_world = np.linalg.inv(Tumeyama)
+            # T_ORB_world = np.linalg.inv(Tumeyama)
             # Calculate the distances from the pose to the landmarks
             distances = calculate_distances(T_ORB_world,pose_w)
             
@@ -127,7 +154,7 @@ for landmark in landmarks:
     landmark_augment = np.append(landmark, 1)
     lm = T_ORB_world@landmark_augment
     print("This is the landmark with constant transfromation \n", lm[:-1])
-print(T_ORB_world)    
+# print(T_ORB_world)    
 
 
 
