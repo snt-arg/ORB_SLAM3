@@ -110,14 +110,14 @@ cout<<"This is the Transformation TOW"<<endl<<T_OW<<endl;
 Eigen::Vector3d lm;
 std::vector<std::vector<double>> l_vec = {{0, 1, 1}, {-2, 3, 4}, {8, -8.0, 9.0}, {-17.0, -20.0, 2.0}};
 vector<double> meas(4);
-vector<double> noise = {0.5, -0.5, 1, 0, 2};
+vector<double> noise = {0.2, -0.2, 4, 0, -0.7};
 for (int i = 0; i<4; i++)
     {
     lm = Eigen::Vector3d(l_vec[i][0], l_vec[i][1], l_vec[i][2]);   
     // cout<<"T_OW"<<T_OW<<endl;  
     // cout<<"T_OW mapping the lm"<<T_OW.map(lm)<<endl;
     // cout<<"---------------------------------"<<endl;
-    meas[i] = (T_OW.map(lm) - t1).norm();//+noise[i]; 
+    meas[i] = (T_OW.map(lm) - t1).norm()+noise[i]; 
     //  cout<<"Measurement is "<<meas[i]<<"this is i"<<i<<endl;
     }
     
@@ -160,7 +160,7 @@ for (int i = 0; i<4; i++)
     e2->setVertex(1, vt);
     e2->setMeasurement(meas[i]);
     e2->setLandmark(l_vec[i]);
-    e2->setInformation(0.000001*Eigen::Matrix<double, 1, 1>::Identity());
+    e2->setInformation(0.05*Eigen::Matrix<double, 1, 1>::Identity());
     optimizer.addEdge(e2);
     }
 
