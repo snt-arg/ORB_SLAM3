@@ -69,12 +69,16 @@ int main(int argc, char *argv[])
 // This is the landmark with constant transfromation 
 //  [9.49057943 6.95301033 4.60027992]
 
+//  [-2.87058525 -3.7868588   3.60676244]
+// This is the landmark with constant transfromation 
+//  [-13.71717786  -2.47631172  -5.70099874]
+// This is the landmark with constant transfromation 
+//  [ 7.03766778 -9.38880906  4.80875873]
 
 
 
 
-
-    ORB_SLAM3::ToA::sBsPositions = {{  3.73702801, -2.8979202,   3.67511305}, {2.22685959, -13.95944924,  -5.34500278}, {9.49057943, 6.95301033, 4.60027992}};
+    ORB_SLAM3::ToA::sBsPositions = {{-2.87058525, -3.7868588,   3.60676244}, {-13.71717786,  -2.47631172,  -5.70099874}, {7.03766778, -9.38880906,  4.80875873}};
    // mInitialFrame.SetPose(Sophus::SE3f(q.cast<float>(), t.cast<float>()));
 
 
@@ -254,10 +258,10 @@ int main(int argc, char *argv[])
             // std::cout<< "vtoa in mono_inertial"<<vToaAll[seq][toaMeas_ind[seq]][2]<<endl;
             // std::cout<< "vtoa in mono_inertial"<<vToaAll[seq][toaMeas_ind[seq]][3]<<endl;
             // std::cout<<"/////////////////////////////////////////////////////////"<<endl;
-             if (abs(tframe - vTimestampsToa[seq][toaMeas_ind[seq]]) < 0.01 ){
+             if (abs(tframe - vTimestampsToa[seq][toaMeas_ind[seq]]) < 0.5 ){
             SLAM.TrackMonocularToa(im,tframe, vToaAll[seq][toaMeas_ind[seq]], vImuMeas); // TODO change to monocular_inertial
             }else{
-                 SLAM.TrackMonocularToa(im,tframe, vector<double>(1,0), vImuMeas);
+                 SLAM.TrackMonocularToa(im,tframe, vector<double>(2,1), vImuMeas);
             }
 
     #ifdef COMPILEDWITHC11

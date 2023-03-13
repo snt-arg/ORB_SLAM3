@@ -191,15 +191,6 @@ endif()
 #Monocular examples
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/Examples/Monocular)
 
-add_executable(test_toa_factor
-        test/test_toa_factor.cc)
-target_link_libraries(test_toa_factor ${PROJECT_NAME})
-
-add_executable(toa_test
-        test/toa_test.cc)
-target_link_libraries(toa_test ${PROJECT_NAME})
-
-
 add_executable(mono_tum
         Examples/Monocular/mono_tum.cc)
 target_link_libraries(mono_tum ${PROJECT_NAME})
@@ -403,3 +394,14 @@ if(realsense2_FOUND)
             Examples_old/Stereo-Inertial/stereo_inertial_realsense_D435i.cc)
     target_link_libraries(stereo_inertial_realsense_D435i_old ${PROJECT_NAME})
 endif()
+
+#Tests
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/test)
+
+add_executable(test_tr
+        test/test_tr.cc)
+target_link_libraries(test_tr ${PROJECT_NAME})
+
+add_executable(toa_test
+        test/toa_test.cc)
+target_link_libraries(toa_test ${PROJECT_NAME})

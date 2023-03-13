@@ -104,6 +104,8 @@ class ToaEdgeUnary : public g2o::BaseUnaryEdge<1, double, g2o::VertexSE3Expmap> 
 //     Eigen::Array<double, 3, 1> _landmark;
 // };
 
+
+
 public:
     ToaEdgeUnary() {}
     void computeError() override {  
@@ -111,12 +113,12 @@ public:
         const Eigen::Vector3d& translation = v->estimate().translation();
         double dEst = (translation - _landmark ).norm();
         _error[0] = dEst - _measurement;
-        cout<<"This is the landmark unary: "<<_landmark<<endl;
-        cout<<"This is the translation: "<<translation<<endl;
-        cout<<"This is the measurement: "<<_measurement<<endl;
-        cout<<"dEst TOAEdge unary: "<<dEst<<endl;
-        cout<<"_error: "<<_error[0]<<endl;
-        cout<<"---------------------------------"<<endl;
+        // cout<<"This is the landmark unary: "<<_landmark<<endl;
+        // cout<<"This is the translation: "<<translation<<endl;
+        // cout<<"This is the measurement: "<<_measurement<<endl;
+        // cout<<"dEst TOAEdge unary: "<<dEst<<endl;
+        // cout<<"_error: "<<_error[0]<<endl;
+        // cout<<"---------------------------------"<<endl;
         }
 
     //     const g2o::VertexSE3Expmap* v = static_cast<const g2o::VertexSE3Expmap*>(_vertices[0]);
@@ -287,6 +289,7 @@ public:
 
         const ORB_SLAM3::VertexPose* VP = static_cast<const ORB_SLAM3::VertexPose*>(_vertices[0]);
         auto& translation = VP->estimate().tcw[0].cast<double>();
+        cout<<"This is the translation vertexPose: "<<translation<<endl;
 
         double dEst = (translation - _landmark.cast<double>()).norm();
         _error[0] = dEst - _measurement;
@@ -381,7 +384,7 @@ for (auto& m : vToa) {
     // cout<<"this is the measurement: "<<m<<endl;
     ToaEdgeUnary* e = new ToaEdgeUnary();
     e->setMeasurement(m); 
-    e->setInformation(0.01*Eigen::Matrix<double, 1, 1>::Identity()); //TODO-msm here we assume the same uncertainty over all measurement 
+    e->setInformation(0.00001*Eigen::Matrix<double, 1, 1>::Identity()); //TODO-msm here we assume the same uncertainty over all measurement 
     e->setVertex(0,optimizer.vertex(frameID));
     e->setLandmark(ToA::sBsPositions[lm_id-1]);
     // e->setRobustKernel(new g2o::RobustKernelHuber());
@@ -391,7 +394,7 @@ for (auto& m : vToa) {
     lm_id ++;
     TOASim3edge* e = new TOASim3edge();
     e->setMeasurement(m); 
-    e->setInformation(0.05*Eigen::Matrix<double, 1, 1>::Identity()); //TODO-msm here we assume the same uncertainty over all measurement 
+    e->setInformation(0.000005*Eigen::Matrix<double, 1, 1>::Identity()); //TODO-msm here we assume the same uncertainty over all measurement 
     e->setVertex(0,optimizer.vertex(frameID));
     e->setLandmark(ToA::sBsPositions[lm_id-1]);
     e->setRobustKernel(new g2o::RobustKernelHuber());
@@ -427,6 +430,7 @@ bool sortByVal(const pair<MapPoint*, int> &a, const pair<MapPoint*, int> &b)
 
 void Optimizer::GlobalBundleAdjustemnt(Map* pMap, int nIterations, bool* pbStopFlag, const unsigned long nLoopKF, const bool bRobust)
 {
+    cout<<"GlobalBundleAdjustemnt"<<endl;
     vector<KeyFrame*> vpKFs = pMap->GetAllKeyFrames();
     vector<MapPoint*> vpMP = pMap->GetAllMapPoints();
     BundleAdjustment(vpKFs,vpMP,nIterations,pbStopFlag, nLoopKF, bRobust);
@@ -436,6 +440,7 @@ void Optimizer::GlobalBundleAdjustemnt(Map* pMap, int nIterations, bool* pbStopF
 void Optimizer::BundleAdjustment(const vector<KeyFrame *> &vpKFs, const vector<MapPoint *> &vpMP,
                                  int nIterations, bool* pbStopFlag, const unsigned long nLoopKF, const bool bRobust)
 {
+    cout<<"BundleAdjustment"<<endl;
     vector<bool> vbNotIncludedMP;
     vbNotIncludedMP.resize(vpMP.size());
 
@@ -774,8 +779,9 @@ void Optimizer::FullInertialBA(Map *pMap, int its, const bool bFixLocal, const l
     long unsigned int maxKFid = pMap->GetMaxKFid();
     const vector<KeyFrame*> vpKFs = pMap->GetAllKeyFrames();
     const vector<MapPoint*> vpMPs = pMap->GetAllMapPoints();
-
+    
     // Setup optimizer
+    
     g2o::SparseOptimizer optimizer;
     g2o::BlockSolverX::LinearSolverType * linearSolver;
 
@@ -800,6 +806,15 @@ void Optimizer::FullInertialBA(Map *pMap, int its, const bool bFixLocal, const l
         KeyFrame* pKFi = vpKFs[i];
         if(pKFi->mnId>maxKFid)
             continue;
+        // //////////////////first frame fixing////////////////////////
+        // if (pKFi->mnId==0){
+        //         cout<<pKFi->GetPose().translation()<<endl;
+        //         Eigen::Matrix3f R = Eigen::Matrix3f::Identity();
+        //         Eigen::Vector3f t = Eigen::Vector3f::Zero();
+        //         Sophus::SE3f TT(R, t);
+        //         pKFi->SetPose(TT);
+        // }
+        // //////////////////Added to fix the first KF////////////////////////
         VertexPose * VP = new VertexPose(pKFi);
         VP->setId(pKFi->mnId);
         pIncKF=pKFi;
@@ -811,9 +826,26 @@ void Optimizer::FullInertialBA(Map *pMap, int its, const bool bFixLocal, const l
                 nNonFixed++;
             VP->setFixed(bFixed);
         }
+        // //////////////////Added to fix the first KF////////////////////////
+        // if (pKFi->mnId==0){
+        //     VP->setFixed(true);
+        //     cout<<"the first estimated pose is fixed"<<endl;
+        //     const auto& trc = VP->estimate().tcw[0];
+        //     const auto& qc = VP->estimate().Rcw[0];
+        //     // Eigen::Matrix<float, 3, 1> translation(trc);
+        //     // Eigen::Quaternion<float> rotation(0.5, 0.5, 0.0, 0.0);
+
+        //     const auto& trb = VP->estimate().twb;
+        //     const auto& qb = VP->estimate().Rwb;
+
+        //     cout<<"trc: "<<trc<<endl;
+        //     cout<<"qc: "<<qc<<endl;
+        //     cout<<"trb: "<<trb<<endl;
+        // }
+        // //////////////////Added to fix the first KF////////////////////////
         optimizer.addVertex(VP);
 
-       OptimizeToa_vert(pKFi->mnId, pKFi->vToa_,  optimizer,  true);
+    //    OptimizeToa_vert(pKFi->mnId, pKFi->vToa_,  optimizer,  true);
 
         if(pKFi->bImu)
         {
@@ -1117,6 +1149,20 @@ void Optimizer::FullInertialBA(Map *pMap, int its, const bool bFixLocal, const l
         if(pKFi->mnId>maxKFid)
             continue;
         VertexPose* VP = static_cast<VertexPose*>(optimizer.vertex(pKFi->mnId));
+    //    ///////////////////////////////////////////////////////////////////////
+    //    // priinting the optimized Pose after doing pose Optimization over the graph4
+    //    cout<<"This is call for FullInertialBA"<<endl;
+    //    const Eigen::Vector3d& tr = VP->estimate().tcw[0].cast<double>();
+    //    double dEst = (tr - Eigen::Vector3d(ToA::sBsPositions[0][0], ToA::sBsPositions[0][1], ToA::sBsPositions[0][2]) ).norm();
+    //    cout<<"Translation: "<<tr.transpose()<<endl;
+    //     if (pKFi->vToa_.size() > 0)
+    //         cout<<"Estimation error before optimization just for one BS: "<<pKFi->vToa_[0]-dEst<<endl;
+
+    //    cout<<"------------------------------------------------------------"<<endl;
+    //           ///////////////////////////////////////////////////////////////////////
+    //    // priinting the optimized Pose after doing pose Optimization over the graph4
+
+
         if(nLoopId==0)
         {
             Sophus::SE3f Tcw(VP->estimate().Rcw[0].cast<float>(), VP->estimate().tcw[0].cast<float>());
@@ -1195,7 +1241,7 @@ void Optimizer::FullInertialBA(Map *pMap, int its, const bool bFixLocal, const l
 
 int Optimizer::PoseOptimization(Frame *pFrame)
 {
-
+    cout<<"PoseOptimization"<<endl;
     g2o::SparseOptimizer optimizer;
     g2o::BlockSolver_6_3::LinearSolverType * linearSolver;
 
@@ -1452,6 +1498,8 @@ OptimizeToa(0, pFrame->vToa_ , optimizer, false);
         optimizer.initializeOptimization(0);
         optimizer.optimize(its[it]);
 
+
+
         nBad=0;
         for(size_t i=0, iend=vpEdgesMono.size(); i<iend; i++)
         {
@@ -1550,12 +1598,21 @@ OptimizeToa(0, pFrame->vToa_ , optimizer, false);
     Sophus::SE3<float> pose(SE3quat_recov.rotation().cast<float>(),
             SE3quat_recov.translation().cast<float>());
     pFrame->SetPose(pose);
+    ///////////////////////////////////////////////////////////////////////
+    // // priinting the optimized Pose after doing pose Optimization over the graph
+    // const Eigen::Vector3d& translation = vSE3_recov->estimate().translation();
+    // double dEst = (translation - Eigen::Vector3d(ToA::sBsPositions[0][0], ToA::sBsPositions[0][1], ToA::sBsPositions[0][2]) ).norm();
+    // cout<<"Translation: "<<translation<<endl;
+    // cout<<"Estimation error after optimization just for one BS:    "<<pFrame->vToa_[0] - dEst<<endl;
+    //     ///////////////////////////////////////////////////////////////////////
+    // // priinting the optimized Pose after doing pose Optimization over the graph
 
     return nInitialCorrespondences-nBad;
 }
 
 void Optimizer::LocalBundleAdjustment(KeyFrame *pKF, bool* pbStopFlag, Map* pMap, int& num_fixedKF, int& num_OptKF, int& num_MPs, int& num_edges)
 {
+    cout<<"LocalBundleAdjustment"<<endl;
     // Local KeyFrames: First Breath Search from Current Keyframe
     list<KeyFrame*> lLocalKeyFrames;
 
@@ -1948,6 +2005,7 @@ void Optimizer::OptimizeEssentialGraph(Map* pMap, KeyFrame* pLoopKF, KeyFrame* p
                                        const LoopClosing::KeyFrameAndPose &CorrectedSim3,
                                        const map<KeyFrame *, set<KeyFrame *> > &LoopConnections, const bool &bFixScale)
 {   
+    cout << "OptimizeEssentialGraph1" << endl;
     // Setup optimizer
     g2o::SparseOptimizer optimizer;
     optimizer.setVerbose(false);
@@ -2232,6 +2290,7 @@ void Optimizer::OptimizeEssentialGraph(Map* pMap, KeyFrame* pLoopKF, KeyFrame* p
 void Optimizer::OptimizeEssentialGraph(KeyFrame* pCurKF, vector<KeyFrame*> &vpFixedKFs, vector<KeyFrame*> &vpFixedCorrectedKFs,
                                        vector<KeyFrame*> &vpNonFixedKFs, vector<MapPoint*> &vpNonCorrectedMPs)
 {
+    cout<<"OptimizeEssentialGraph2"<<endl;
     Verbose::PrintMess("Opt_Essential: There are " + to_string(vpFixedKFs.size()) + " KFs fixed in the merged map", Verbose::VERBOSITY_DEBUG);
     Verbose::PrintMess("Opt_Essential: There are " + to_string(vpFixedCorrectedKFs.size()) + " KFs fixed in the old map", Verbose::VERBOSITY_DEBUG);
     Verbose::PrintMess("Opt_Essential: There are " + to_string(vpNonFixedKFs.size()) + " KFs non-fixed in the merged map", Verbose::VERBOSITY_DEBUG);
@@ -2569,6 +2628,7 @@ void Optimizer::OptimizeEssentialGraph(KeyFrame* pCurKF, vector<KeyFrame*> &vpFi
 int Optimizer::OptimizeSim3(KeyFrame *pKF1, KeyFrame *pKF2, vector<MapPoint *> &vpMatches1, g2o::Sim3 &g2oS12, const float th2,
                             const bool bFixScale, Eigen::Matrix<double,7,7> &mAcumHessian, const bool bAllPoints)
 {
+    cout << "OptimizingSim3" << endl;
     g2o::SparseOptimizer optimizer;
     g2o::BlockSolverX::LinearSolverType * linearSolver;
 
@@ -2836,6 +2896,7 @@ int Optimizer::OptimizeSim3(KeyFrame *pKF1, KeyFrame *pKF2, vector<MapPoint *> &
 
 void Optimizer::LocalInertialBA(KeyFrame *pKF, bool *pbStopFlag, Map *pMap, int& num_fixedKF, int& num_OptKF, int& num_MPs, int& num_edges, bool bLarge, bool bRecInit)
 {
+    cout<<"LocalInertialBA"<<endl;
     Map* pCurrentMap = pKF->GetMap();
 
     int maxOpt=10;
@@ -3503,6 +3564,7 @@ Eigen::MatrixXd Optimizer::Marginalize(const Eigen::MatrixXd &H, const int &star
 
 void Optimizer::InertialOptimization(Map *pMap, Eigen::Matrix3d &Rwg, double &scale, Eigen::Vector3d &bg, Eigen::Vector3d &ba, bool bMono, Eigen::MatrixXd  &covInertial, bool bFixedVel, bool bGauss, float priorG, float priorA)
 {
+    cout << "InertialOptimization1" << endl;
     Verbose::PrintMess("inertial optimization", Verbose::VERBOSITY_NORMAL);
     int its = 200;
     long unsigned int maxKFid = pMap->GetMaxKFid();
@@ -3688,6 +3750,7 @@ void Optimizer::InertialOptimization(Map *pMap, Eigen::Matrix3d &Rwg, double &sc
 
 void Optimizer::InertialOptimization(Map *pMap, Eigen::Vector3d &bg, Eigen::Vector3d &ba, float priorG, float priorA)
 {
+    cout<<"InertialOptimization2"<<endl;
     int its = 200; // Check number of iterations
     long unsigned int maxKFid = pMap->GetMaxKFid();
     const vector<KeyFrame*> vpKFs = pMap->GetAllKeyFrames();
@@ -3850,6 +3913,7 @@ void Optimizer::InertialOptimization(Map *pMap, Eigen::Vector3d &bg, Eigen::Vect
 
 void Optimizer::InertialOptimization(Map *pMap, Eigen::Matrix3d &Rwg, double &scale)
 {
+    cout << "InertialOptimization3" << endl;
     int its = 10;
     long unsigned int maxKFid = pMap->GetMaxKFid();
     const vector<KeyFrame*> vpKFs = pMap->GetAllKeyFrames();
@@ -3959,6 +4023,7 @@ void Optimizer::InertialOptimization(Map *pMap, Eigen::Matrix3d &Rwg, double &sc
 
 void Optimizer::LocalBundleAdjustment(KeyFrame* pMainKF,vector<KeyFrame*> vpAdjustKF, vector<KeyFrame*> vpFixedKF, bool *pbStopFlag)
 {
+    cout<<"LocalBundleAdjustment"<<endl;
     bool bShowImages = false;
 
     vector<MapPoint*> vpMPs;
@@ -4045,7 +4110,7 @@ void Optimizer::LocalBundleAdjustment(KeyFrame* pMainKF,vector<KeyFrame*> vpAdju
     //as we do not localize BS (radio map), we do not use it here
 
     //TODO-msm: LocalBundleAdjsutment 
-    OptimizeToa(pKFi->mnId, pKFi->vToa_ , optimizer, false);
+    // OptimizeToa(pKFi->mnId, pKFi->vToa_ , optimizer, false);
     // ////////////////////my own code/////////////////////////////////////////
         set<MapPoint*> spViewMPs = pKFi->GetMapPoints();
         for(MapPoint* pMPi : spViewMPs)
@@ -4417,6 +4482,7 @@ void Optimizer::LocalBundleAdjustment(KeyFrame* pMainKF,vector<KeyFrame*> vpAdju
 
 void Optimizer::MergeInertialBA(KeyFrame* pCurrKF, KeyFrame* pMergeKF, bool *pbStopFlag, Map *pMap, LoopClosing::KeyFrameAndPose &corrPoses)
 {
+    cout<<"MergeInertialBA"<<endl;
     const int Nd = 6;
     const unsigned long maxKFid = pCurrKF->mnId;
 
@@ -4960,6 +5026,7 @@ void Optimizer::MergeInertialBA(KeyFrame* pCurrKF, KeyFrame* pMergeKF, bool *pbS
 
 int Optimizer::PoseInertialOptimizationLastKeyFrame(Frame *pFrame, bool bRecInit)
 {
+    cout<<"PoseInertialOptimizationLastKeyFrame"<<endl;
     g2o::SparseOptimizer optimizer;
     g2o::BlockSolverX::LinearSolverType * linearSolver;
 
@@ -5349,6 +5416,7 @@ int Optimizer::PoseInertialOptimizationLastKeyFrame(Frame *pFrame, bool bRecInit
 
 int Optimizer::PoseInertialOptimizationLastFrame(Frame *pFrame, bool bRecInit)
 {
+    cout << "PoseInertialOptimizationLastFrame" << endl;
     g2o::SparseOptimizer optimizer;
     g2o::BlockSolverX::LinearSolverType * linearSolver;
 
@@ -5709,6 +5777,20 @@ int Optimizer::PoseInertialOptimizationLastFrame(Frame *pFrame, bool bRecInit)
     b << VG->estimate(), VA->estimate();
     pFrame->mImuBias = IMU::Bias(b[3],b[4],b[5],b[0],b[1],b[2]);
 
+
+        ///////////////////////////////////////////////////////////////////////
+    //    // priinting the node optimized after PoseInertialOptimizationLastFrame
+    //    const Eigen::Vector3d& trc = VP->estimate().tcw[0].cast<double>();
+    //    const Eigen::Vector3d& trb = VP->estimate().twb.cast<double>();
+
+    // //    double dEst = (tr - Eigen::Vector3d(ToA::sBsPositions[0][0], ToA::sBsPositions[0][1], ToA::sBsPositions[0][2]) ).norm();
+    //    cout<<"Translation (tcw[0]): "<<trc.transpose()<<endl;
+    //    cout<<"Translation (tcb): "<<trb.transpose()<<endl;
+    //     if (pFrame->vToa_.size() > 0)
+    //         cout<<"GT_c: "<<pFrame->vToa_[0]<< ','<<pFrame->vToa_[1]<< ','<<pFrame->vToa_[2]<<endl;
+    //    cout<<"------------------------------------------------------------"<<endl;
+        ///////////////////////////////////////////////////////////////////////
+
     // Recover Hessian, marginalize previous frame states and generate new prior for frame
     Eigen::Matrix<double,30,30> H;
     H.setZero();
@@ -5774,6 +5856,7 @@ void Optimizer::OptimizeEssentialGraph4DoF(Map* pMap, KeyFrame* pLoopKF, KeyFram
                                        const LoopClosing::KeyFrameAndPose &CorrectedSim3,
                                        const map<KeyFrame *, set<KeyFrame *> > &LoopConnections)
 {
+    cout << "OptimizeEssentialGraph4DoF" << endl;
     typedef g2o::BlockSolver< g2o::BlockSolverTraits<4, 4> > BlockSolver_4_4;
 
     // Setup optimizer

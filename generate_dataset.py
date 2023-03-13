@@ -80,9 +80,14 @@ def calculate_distances(T_ORB_world, pose):
         lm = T_ORB_world@landmark_augment
         # calculate the pose of the camera wrt to the ORB frame (the first ground truth)
         GT_wv =get_transformation_matrix(pose)
-        # GT_orb_w = T_ORB_world@GT_wv@TVC  
-        GT_orb_w = T_ORB_world@GT_wv@np.linalg.inv(TBV)
-        pose_final = get_pose_from_transformation_matrix(GT_orb_w)
+        #######################################################
+        #when working with camera frame
+        GT_orb_C = T_ORB_world@GT_wv@TVC  
+        pose_final = get_pose_from_transformation_matrix(GT_orb_C)
+        # when working with body frame
+        # GT_orb_B = T_ORB_world@GT_wv@np.linalg.inv(TBV)
+        # pose_final = get_pose_from_transformation_matrix(GT_orb_B)
+        #######################################################
         distance = np.linalg.norm(pose_final [0:3] - lm[:-1])
         distances.append(distance)
     return distances
@@ -109,11 +114,13 @@ with open('/home/meisam/ORB_SLAM3/Datasets/EuRoC/V101/mav0/vicon0/data.csv', 'r'
                 T_world_V0 = np.vstack([np.hstack([R_world_V0, t[:, np.newaxis]]), np.array([0, 0, 0, 1])])
                 ######################################################
                 # If ORB is tracking the camera frame
-                # T_world_C0 = T_world_V0@TVC
-                # T_ORB_world = np.linalg.inv(T_world_C0)
+                T_world_C0 = T_world_V0@TVC
+                T_ORB_world = np.linalg.inv(T_world_C0)
 
-                T_world_B0 = T_world_V0@np.linalg.inv(TBV)
-                T_ORB_world = np.linalg.inv(T_world_B0)
+
+                # If ORB is tracking the body frame
+                # T_world_B0 = T_world_V0@np.linalg.inv(TBV)
+                # T_ORB_world = np.linalg.inv(T_world_B0)
                 #######################################################
                 
                 

@@ -550,6 +550,10 @@ Sophus::SE3f System::TrackMonocularToa(const cv::Mat &im, const double &timestam
 
     Sophus::SE3f Tcw = mpTracker->GrabImageMonocular(imToFeed,timestamp,filename, vToa);
 
+    // cout<<"Tcw is  "<<Tcw.matrix()<<endl;
+    // cout<<"Tcw is inverse  "<<Tcw.matrix().inverse()<<endl;
+
+
     unique_lock<mutex> lock2(mMutexState);
     mTrackingState = mpTracker->mState;
     mTrackedMapPoints = mpTracker->mCurrentFrame.mvpMapPoints;
@@ -759,6 +763,7 @@ void System::SaveTrajectoryEuRoC(const string &filename)
     }*/
 
     vector<Map*> vpMaps = mpAtlas->GetAllMaps();
+    cout<<"number of maps"<<vpMaps.size()<<endl;
     int numMaxKFs = 0;
     Map* pBiggerMap;
     std::cout << "There are " << std::to_string(vpMaps.size()) << " maps in the atlas" << std::endl;
@@ -778,10 +783,17 @@ void System::SaveTrajectoryEuRoC(const string &filename)
     // Transform all keyframes so that the first keyframe is at the origin.
     // After a loop closure the first keyframe might not be at the origin.
     Sophus::SE3f Twb; // Can be word to cam0 or world to b depending on IMU or not.
+    
     if (mSensor==IMU_MONOCULAR || mSensor==IMU_STEREO || mSensor==IMU_RGBD)
         Twb = vpKFs[0]->GetImuPose();
     else
         Twb = vpKFs[0]->GetPoseInverse();
+
+
+    // Eigen::Matrix3f R = Eigen::Matrix3f::Identity();
+    // Eigen::Vector3f t = Eigen::Vector3f::Zero();
+    // Twb = Sophus::SE3f(R, t);
+   cout<<"Twb: "<<vpKFs[0]->GetPose().matrix()<<endl;     
 
     ofstream f;
     f.open(filename.c_str());
@@ -838,6 +850,31 @@ void System::SaveTrajectoryEuRoC(const string &filename)
         }
 
         //cout << "3" << endl;
+// //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+//         cout<<"This is in the savetrajecotyrfuncion euroc   "<< pKF->GetPose().translation().transpose()<<endl;
+//                double dEst = (pKF->GetPose().translation().cast<double>() - Eigen::Vector3d(ToA::sBsPositions[0][0], ToA::sBsPositions[0][1], ToA::sBsPositions[0][2]) ).norm();
+//                cout<<"Translation: "<<pKF->GetPose().translation().transpose()<<endl;
+//                 if (pKF->vToa_.size() > 0)
+//                     cout<<"Estimation error before optimization just for one BS: "<<pKF->vToa_[0]-dEst<<endl;
+
+//                cout<<"------------------------------------------------------------"<<endl;
+
+
+        //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+            // cout<<"Print the poses of frames in the trajectory   "<< pKF->GetPose().translation().transpose()<<endl;
+            // Sophus::SE3f Twc_print = ((*lit)*Trw).inverse();
+            // Eigen::Quaternionf q = Twc_print.unit_quaternion();
+            // Eigen::Vector3d twc_print = Twc_print.translation();
+
+            //    double dEst = (twc_print - Eigen::Vector3d(ToA::sBsPositions[0][0], ToA::sBsPositions[0][1], ToA::sBsPositions[0][2]) ).norm();
+            //    cout<<"Translation: "<<twc_print<<endl;
+            //     if (pKF->vToa_.size() > 0)
+            //         cout<<"Estimation error before optimization just for one BS: "<<pKF->vToa_[0]-dEst<<endl;
+
+            //    cout<<"------------------------------------------------------------"<<endl;
+
+
 
         Trw = Trw * pKF->GetPose()*Twb; // Tcp*Tpw*Twb0=Tcb0 where b0 is the new world reference
 
