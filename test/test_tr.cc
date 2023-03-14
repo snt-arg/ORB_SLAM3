@@ -45,7 +45,7 @@ public:
         _error[0] = dEst - _measurement;
         // cout<<"This is the landmark unary: "<<_landmark<<endl;
         // cout<<"This is the translation: "<<translation<<endl;
-        // cout<<"This is the measurement: "<<_measurement<<endl;
+        // // cout<<"This is the measurement: "<<_measurement<<endl;
         // cout<<"dEst TOAEdge unary: "<<dEst<<endl;
         // cout<<"_error: "<<_error[0]<<endl;
         // cout<<"---------------------------------"<<endl;
@@ -94,32 +94,46 @@ private:
 // int main(int argc, char *argv[])
 int main(int argc, char *argv[])
 {
-Eigen::Quaterniond q1(1,0,0, 0);
-Eigen::Vector3d t1(1, 3, 2);
-Eigen::Vector3d t1_noisy(1, 3, 2);
-g2o::SE3Quat P_OC(q1, t1);
-g2o::SE3Quat P_OC_noisy(q1, t1_noisy);
 
-Eigen::Quaterniond q2 = Eigen::Quaterniond::UnitRandom();
-Eigen::Vector3d t2 = Eigen::Vector3d::Random();
+int num_pose = 5;
+int num_landmarks = 4;
+std::vector<std::vector<double>> Landmakrs = {{0, 1, 1}, {-2, 3, 4}, {8, -8.0, 9.0}, {-17.0, -20.0, 2.0}};
+std::vector<g2o::SE3Quat> vPose;
+std::vector<vector<double>> measurements;
+// vPose.resize(num_pose);
+
+// Eigen::Quaterniond q2 = Eigen::Quaterniond::UnitRandom();
+// Eigen::Vector3d t2 = Eigen::Vector3d::Random();
+// g2o::SE3Quat T_OW(q2, t2);
+Eigen::Quaterniond q2 =Eigen::Quaterniond(1,0,0,0);
+Eigen::Vector3d t2 = Eigen::Vector3d(0,0,0);
 g2o::SE3Quat T_OW(q2, t2);
+
+
+for (int i = 0; i<num_pose; i++)
+    {
+        Eigen::Vector3d t = 5*Eigen::Vector3d::Random();
+        Eigen::Quaterniond q = Eigen::Quaterniond::UnitRandom();
+        g2o::SE3Quat p(q, t);
+        vPose.push_back(p);
+    }
+    vPose[0] = g2o::SE3Quat(q2, t2);
+    cout<<"size vpose"<<vPose.size()<<endl;
+
+
+
+
+
+
+
+
+
+
+
 
 cout<<"This is the Transformation TOW"<<endl<<T_OW<<endl;
 
 
-Eigen::Vector3d lm;
-std::vector<std::vector<double>> l_vec = {{0, 1, 1}, {-2, 3, 4}, {8, -8.0, 9.0}, {-17.0, -20.0, 2.0}};
-vector<double> meas(4);
-vector<double> noise = {0.2, -0.2, 4, 0, -0.7};
-for (int i = 0; i<4; i++)
-    {
-    lm = Eigen::Vector3d(l_vec[i][0], l_vec[i][1], l_vec[i][2]);   
-    // cout<<"T_OW"<<T_OW<<endl;  
-    // cout<<"T_OW mapping the lm"<<T_OW.map(lm)<<endl;
-    // cout<<"---------------------------------"<<endl;
-    meas[i] = (T_OW.map(lm) - t1).norm()+noise[i]; 
-    //  cout<<"Measurement is "<<meas[i]<<"this is i"<<i<<endl;
-    }
     
     // Setup optimizer
     g2o::SparseOptimizer optimizer;
@@ -130,61 +144,98 @@ for (int i = 0; i<4; i++)
     solver->setUserLambdaInit(1e-5);
     optimizer.setAlgorithm(solver);
     optimizer.setVerbose(false);
- 
 
-    //add vertex
-    g2o::VertexSE3Expmap* v = new g2o::VertexSE3Expmap();
-    v->setId(0);
-    v->setEstimate(g2o::SE3Quat());
-    optimizer.addVertex(v);  
 
     //add the transformation vertex
-    g2o::VertexSE3Expmap* vt = new g2o::VertexSE3Expmap();
-    vt->setId(1);
-    vt->setEstimate(g2o::SE3Quat());
-    // vt->setEstimate(T_OW);
-    optimizer.addVertex(vt); 
+   g2o::VertexSE3Expmap* vt = new g2o::VertexSE3Expmap();
+   vt->setId(-1);
+   vt->setEstimate(g2o::SE3Quat());
+   // vt->setEstimate(T_OW);
+   optimizer.addVertex(vt); 
+   
 
-    cout<<"thi is third"<<endl;
-    //add the SE3 edge to the vertex 0
-    FullPoseEdge* e1 = new FullPoseEdge();
-    e1->setVertex(0, optimizer.vertex(0));
-    e1->setMeasurement(P_OC_noisy);
-    e1->setInformation(0.1*Eigen::Matrix<double, 6, 6>::Identity());
-    optimizer.addEdge(e1);
+   int i = 0;
+   int j = -1;
+   double meas;
+   g2o::SE3Quat p;
+   Eigen::Vector3d landmark;
+   for (int i = 0; i<num_pose; i++)
+       {
+            p = vPose[i];
+           //add the keyframe vertex
+           g2o::VertexSE3Expmap* v = new g2o::VertexSE3Expmap();
+           v->setId(i);
+           v->setEstimate(g2o::SE3Quat());
+           if (i==0)
+           {
+               v->setFixed(true);
+           }
+           optimizer.addVertex(v);
+           cout << "Vertex (keyfram) ground truth "<< i<< ":" <<endl<<p<< endl;
+           //add the edge for that vertex (not necessary), need to noisy measurements ....
+           // TODO: add the edge for that vertex
+           // ADD full pose Edge
+            FullPoseEdge* e = new FullPoseEdge();
+            e->setVertex(0, optimizer.vertex(i));
+            e->setMeasurement(p);
+            e->setInformation(0.01*Eigen::Matrix<double, 6, 6>::Identity());
+            optimizer.addEdge(e);
+           //ADD relative pose edge
+           if (i>0)
+           {
+                g2o::EdgeSE3 * e = new g2o::EdgeSE3();
+                e->setVertex(0, optimizer.vertex(i-1));
+                e->setVertex(1, optimizer.vertex(i));
+                e->setMeasurement(vPose[i].inverse() * vPose[i-1]);
+                e->setInformation(0.1*Eigen::Matrix<double, 6, 6>::Identity());
+                optimizer.addEdge(e);
+           }
 
-    //add the binary edges between those two vertices
-    for (int i = 0; i<4; i++){
-    ToaEdgeTr* e2 = new ToaEdgeTr();
-    e2->setVertex(0, v);
-    e2->setVertex(1, vt);
-    e2->setMeasurement(meas[i]);
-    e2->setLandmark(l_vec[i]);
-    e2->setInformation(0.05*Eigen::Matrix<double, 1, 1>::Identity());
-    optimizer.addEdge(e2);
-    }
+           for (vector<double> l: Landmakrs)
+           {
+               j++;
+               ////add the binary edges between those two vertices
+               Eigen::Vector3d landmark(l[0], l[1], l[2]);
+               meas = (T_OW.map(landmark) - p.translation()).norm();
+               ToaEdgeTr* e = new ToaEdgeTr();
+                e->setVertex(0, optimizer.vertex(i));
+                e->setVertex(1, optimizer.vertex(-1));
+                e->setMeasurement(meas);
+                e->setLandmark(l);
+                e->setInformation(0.1*Eigen::Matrix<double, 1, 1>::Identity());
+                optimizer.addEdge(e);
+           }
+       }
 
-
-
-
-// // Print the values of vertices before optimization and after it
-cout << "Vertex 0 estimate before optimization: " << v->estimate() << endl;
-cout << "Vertex 1 estimate before optimization: " << vt->estimate() << endl;
+    // //add the SE3 edge to the vertex 0
+    // FullPoseEdge* e1 = new FullPoseEdge();
+    // e1->setVertex(0, optimizer.vertex(0));
+    // e1->setMeasurement(P_OC_noisy);
+    // e1->setInformation(0.5*Eigen::Matrix<double, 6, 6>::Identity());
+    // optimizer.addEdge(e1);
 
     // Optimize the graph
     std::cout << "Number of vertices: " << optimizer.vertices().size() << std::endl;
     std::cout << "Number of edges: " << optimizer.edges().size() << std::endl;
     optimizer.initializeOptimization();
     optimizer.computeActiveErrors();
-    optimizer.optimize(20);
+    optimizer.optimize(50);
     optimizer.computeActiveErrors();
 
 
-cout << "Vertex 0 estimate after optimization: " <<endl<<v->estimate()<< endl;
-cout << "Vertex 1 estimate after optimization: " <<endl<<vt->estimate()<< endl;
+    // Print the values of vertices after optimization and after it
+    g2o::VertexSE3Expmap* v = dynamic_cast<g2o::VertexSE3Expmap*>(optimizer.vertex(-1));
+    cout << "Transformation Vertex"<< i<< ":" <<endl<<v->estimate()<< endl;
+
+    for (int i; i < optimizer.vertices().size()-1; i++)
+    {
+        g2o::VertexSE3Expmap* v = dynamic_cast<g2o::VertexSE3Expmap*>(optimizer.vertex(i));
+        cout << "Vertex (keyframe) after optimization "<< i+1<< ":" <<endl<<v->estimate()<< endl;
+    }
 
 
 return 1;
+
 }
 
 // void OptimizeToa(int frameID, std::vector<double> vToa,  g2o::SparseOptimizer& optimizer, bool bSim3 )
@@ -204,6 +255,8 @@ return 1;
 // }
 
 // };
+
+
 
 
 
