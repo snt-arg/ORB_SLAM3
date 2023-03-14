@@ -15,6 +15,11 @@
 #include "Thirdparty/g2o/g2o/types/types_six_dof_expmap.h"
 #include "Thirdparty/g2o/g2o/core/robust_kernel_impl.h"
 #include "Thirdparty/g2o/g2o/solvers/linear_solver_dense.h"
+#include <random>
+#include <chrono>
+
+// Get the current time as a seed for the random number generator
+
 // #include "G2oTypes.h"
 // #include "Converter.h"
 
@@ -27,7 +32,13 @@
 // using namespace ORB_SLAM3;
 using namespace std;
 
+
+
 void OptimizeToa(int frameID, std::vector<double> vToa, g2o::SparseOptimizer &optimizer, bool bSim3 = true);
+
+g2o::SE3Quat addSE3Noise(const g2o::SE3Quat& se3, double trans_stddev, double rot_stddev);
+Eigen::Quaterniond generateQuaternionNoise(double stddev);
+double generateToaNoise(double stddev);
 class ToaEdgeTr : public g2o::BaseBinaryEdge<1, double, g2o::VertexSE3Expmap, g2o::VertexSE3Expmap>
 {
 
@@ -89,7 +100,9 @@ private:
 // int main(int argc, char *argv[])
 int main(int argc, char *argv[])
 {
-
+    unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
+    std::default_random_engine generator(seed);
+    
     int num_pose = 5;
     int num_landmarks = 4;
     std::vector<std::vector<double>> Landmakrs = {{0, 1, 1}, {-2, 3, 4}, {8, -8.0, 9.0}, {-17.0, -20.0, 2.0}};
@@ -101,7 +114,7 @@ int main(int argc, char *argv[])
     Eigen::Vector3d t2 = Eigen::Vector3d(0, 0, 0);
     g2o::SE3Quat T_OW(q2, t2);
 
-    vPose.push_back(T_OW);
+    // vPose.push_back(T_OW);
 
     for (int i = 1; i < num_pose; i++)
     {
@@ -121,12 +134,12 @@ int main(int argc, char *argv[])
     optimizer.setAlgorithm(solver);
     optimizer.setVerbose(false);
 
-    // // add the transformation vertex
-    // g2o::VertexSE3Expmap *vt = new g2o::VertexSE3Expmap();
-    // vt->setId(-1);
-    // vt->setEstimate(g2o::SE3Quat());
-    // // vt->setEstimate(T_OW);
-    // optimizer.addVertex(vt);
+    // add the transformation vertex
+    g2o::VertexSE3Expmap *vt = new g2o::VertexSE3Expmap();
+    vt->setId(-1);
+    vt->setEstimate(g2o::SE3Quat());
+    vt->setEstimate(T_OW);
+    optimizer.addVertex(vt);
 
     int i = 0;
     double meas;
@@ -134,6 +147,7 @@ int main(int argc, char *argv[])
     Eigen::Vector3d landmark;
     for (int i = 0; i < num_pose; i++)
     {
+
         p = vPose[i];
         // add the keyframe vertex
         g2o::VertexSE3Expmap *v = new g2o::VertexSE3Expmap();
@@ -151,7 +165,7 @@ int main(int argc, char *argv[])
             g2o::VertexSE3Expmap *prev = dynamic_cast<g2o::VertexSE3Expmap *>(optimizer.vertex(i - 1));
             // TODO add some small noise here
             auto meas = p * vPose[i-1].inverse();
-            e->setMeasurement(meas);
+            e->setMeasurement(addSE3Noise(meas, 0.1, 0.01));
             e->setInformation(0.01 * Eigen::Matrix<double, 6, 6>::Identity());
             optimizer.addEdge(e);
 
@@ -167,28 +181,21 @@ int main(int argc, char *argv[])
         // e->setInformation(0.01 * Eigen::Matrix<double, 6, 6>::Identity());
         // optimizer.addEdge(e);
 
-        // for (vector<double> l : Landmakrs)
-        // {
-        //     j++;
-        //     ////add the binary edges between those two vertices
-        //     Eigen::Vector3d landmark(l[0], l[1], l[2]);
-        //     meas = (T_OW.map(landmark) - p.translation()).norm();
-        //     ToaEdgeTr *e = new ToaEdgeTr();
-        //     e->setVertex(0, optimizer.vertex(i));
-        //     e->setVertex(1, optimizer.vertex(-1));
-        //     e->setMeasurement(meas);
-        //     e->setLandmark(l);
-        //     e->setInformation(0.1 * Eigen::Matrix<double, 1, 1>::Identity());
-        //     optimizer.addEdge(e);
-        // }
+        for (vector<double> l : Landmakrs)
+        {
+            ////add the binary edges between those two vertices
+            Eigen::Vector3d landmark(l[0], l[1], l[2]);
+            meas = (T_OW.map(landmark) - p.translation()).norm();
+            ToaEdgeTr *e = new ToaEdgeTr();
+            e->setVertex(0, optimizer.vertex(i));
+            e->setVertex(1, optimizer.vertex(-1));
+            e->setMeasurement(meas);
+            e->setLandmark(l);
+            e->setInformation(0.01 * Eigen::Matrix<double, 1, 1>::Identity());
+            optimizer.addEdge(e);
+        }
     }
 
-    // //add the SE3 edge to the vertex 0
-    // FullPoseEdge* e1 = new FullPoseEdge();
-    // e1->setVertex(0, optimizer.vertex(0));
-    // e1->setMeasurement(P_OC_noisy);
-    // e1->setInformation(0.5*Eigen::Matrix<double, 6, 6>::Identity());
-    // optimizer.addEdge(e1);
 
     // Optimize the graph
     std::cout << "Number of vertices: " << optimizer.vertices().size() << std::endl;
@@ -213,8 +220,93 @@ int main(int argc, char *argv[])
              << v->estimate() << endl;
     }
 
+    //Printing the Transformation and it estimation 
+    g2o::VertexSE3Expmap *v = dynamic_cast<g2o::VertexSE3Expmap *>(optimizer.vertex(-1));
+        cout << "Transformation GT " << endl
+             << vPose[i] << endl;
+        cout << "Estimated Transformation " << endl
+             << v->estimate() << endl;
+
+
+//testing the noise function
+//print the noisy pose for two poses
+cout<<"Testing the noise function for quaternion as well as two SE3 poses"<<endl;
+    for (i=0; i < 2; i++)
+    {
+    auto q = generateQuaternionNoise(0.01);
+    cout <<"printing the generated noisy quaternion"<<endl
+         <<q.coeffs() << endl;
+    auto p_noisy = addSE3Noise(vPose[i], 0.1, 0.01);
+    cout << "the pose " << endl
+             << T_OW << endl;
+        cout << "Noisy pose: " << endl
+             << p_noisy << endl;
+        cout<<"/////////////////////////////////////////"<<endl;     
+    }
+
     return 0;
 }
+
+g2o::SE3Quat addSE3Noise(const g2o::SE3Quat& se3, double trans_stddev, double rot_stddev)
+{
+    // Create a random number generator with a normal distribution
+    unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
+    std::default_random_engine generator(seed);
+
+    std::normal_distribution<double> distribution(0.0, 1.0);
+
+    // Generate random noise for the translation component
+    Eigen::Vector3d trans_noise(distribution(generator) * trans_stddev,
+                                distribution(generator) * trans_stddev,
+                                distribution(generator) * trans_stddev);
+
+    // Generate random noise for the rotation component
+    Eigen::Quaterniond rot_noise = generateQuaternionNoise(rot_stddev);
+
+    // Add noise to the translation and rotation components
+    g2o::SE3Quat se3_noise(rot_noise * se3.rotation(), se3.translation() + trans_noise);
+
+    return se3_noise;
+}
+
+Eigen::Quaterniond generateQuaternionNoise(double stddev)
+{
+    // Create a random number generator with a normal distribution
+    // std::default_random_engine generator;
+    unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
+    std::default_random_engine generator(seed);
+    std::normal_distribution<double> distribution(0.0, stddev);
+
+    // Generate random values for the quaternion components
+    double x = distribution(generator);
+    double y = distribution(generator);
+    double z = distribution(generator);
+    double w = distribution(generator);
+
+    // Normalize the quaternion to ensure it represents a rotation
+    Eigen::Quaterniond q(w, x, y, z);
+    q.normalize();
+
+    return q;
+}
+
+double AddToaNoise(double meas, double stddev){
+    // Create a random number generator with a normal distribution
+    // std::default_random_engine generator;
+    unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
+    std::default_random_engine generator(seed);
+    std::normal_distribution<double> distribution(0.0, stddev);
+
+    // Generate random values for the quaternion components
+    double x = distribution(generator);
+    return meas+x;
+}
+
+
+
+
+
+
 
 // void OptimizeToa(int frameID, std::vector<double> vToa,  g2o::SparseOptimizer& optimizer, bool bSim3 )
 // {
