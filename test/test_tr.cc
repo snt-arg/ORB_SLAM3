@@ -173,7 +173,7 @@ int main(int argc, char *argv[])
             auto meas = p * vPose[i-1].inverse();
             e->setMeasurement(addSE3Noise(meas, 0.1, 0.01));
             e->setInformation(0.01 * Eigen::Matrix<double, 6, 6>::Identity());
-            optimizer.addEdge(e);
+            // optimizer.addEdge(e);
 
             v->setEstimate(meas*prev->estimate());
         }
