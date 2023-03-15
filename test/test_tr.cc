@@ -5,7 +5,7 @@
 
 #include <Eigen/StdVector>
 #include <Eigen/Dense>
-#include <unsupported/Eigen/MatrixFunctions>
+#include <random>
 
 #include "Thirdparty/g2o/g2o/core/sparse_block_matrix.h"
 #include "Thirdparty/g2o/g2o/core/block_solver.h"
@@ -15,8 +15,6 @@
 #include "Thirdparty/g2o/g2o/types/types_six_dof_expmap.h"
 #include "Thirdparty/g2o/g2o/core/robust_kernel_impl.h"
 #include "Thirdparty/g2o/g2o/solvers/linear_solver_dense.h"
-#include <random>
-#include <chrono>
 
 // Get the current time as a seed for the random number generator
 
@@ -31,6 +29,7 @@
 
 // using namespace ORB_SLAM3;
 using namespace std;
+using namespace Eigen;
 
 void OptimizeToa(int frameID, vector<double> vToa, g2o::SparseOptimizer &optimizer, bool bSim3 = true);
 
@@ -50,7 +49,7 @@ public:
         const g2o::VertexSE3Expmap *v0 = static_cast<const g2o::VertexSE3Expmap *>(_vertices[0]);
         const g2o::VertexSE3Expmap *v1 = static_cast<const g2o::VertexSE3Expmap *>(_vertices[1]);
         Eigen::Vector3d landmark_tr = v1->estimate().map(_landmark);
-        auto est_distance = (landmark_tr-v0->estimate().translation()).norm();
+        auto est_distance = (landmark_tr - v0->estimate().translation()).norm();
         _error[0] = est_distance - _measurement;
     }
 
@@ -149,26 +148,45 @@ double genToANoise(double stddev)
     return x;
 }
 
-int main(int argc, char *argv[])
+double computeRMSE(const std::vector<g2o::Vector6d> &errors)
 {
+    int num_errors = errors.size();
+    g2o::Vector6d squared_errors_sum = g2o::Vector6d::Zero();
 
-    int num_pose = 50;
-    int num_landmarks = 3;
-    // manual initialization of the landmarks:
-    vector<Eigen::Vector3d> landmarks = {{0, 1, 1}, {-2, 3, 4}, {8, -8.0, 9.0}};\
-    //random initialization of the landmarks:
-    // vector<Eigen::Vector3d> landmarks;
-    // landmarks.reserve(num_landmarks);
+    for (int i = 0; i < num_errors; ++i)
+    {
+        squared_errors_sum += errors[i].matrix().array().square().matrix();
+    }
 
-    // // These are position of Li wrt G : Li -> G
-    // for (int i = 0; i < num_landmarks; i++)
-    // {
-    //     Eigen::Vector3d pos = createRandomLandmark(10);
-    //     cout << "Landmark " << i << " created at position: " << pos.transpose() << endl;
-    //     landmarks.push_back(pos);
-    // }
+    double squared_errors_sum_avg = squared_errors_sum.sum() / (num_errors * 6);
+    double rmse = std::sqrt(squared_errors_sum_avg);
 
-    g2o::SE3Quat gtPoseWG = createRandomSE3Increment(50, 10);
+    return rmse;
+}
+
+int optimizeGraph(int num_pose = 500, int num_landmarks = 1, bool fixed_landmarks = true, bool addToAFactors = false)
+{
+    vector<Eigen::Vector3d> landmarks;
+    landmarks.reserve(num_landmarks);
+    // random initialization of the landmarks:
+    if (!fixed_landmarks)
+    {
+        // These are position of Li wrt G : Li -> G
+        for (int i = 0; i < num_landmarks; i++)
+        {
+            Eigen::Vector3d pos = createRandomLandmark(10);
+            cout << "Landmark " << i << " created at position: " << pos.transpose() << endl;
+            landmarks.push_back(pos);
+        }
+    }
+    else
+    {
+        // manual initialization of the landmarks:
+        std::vector<Eigen::Vector3d> fixed_landmarks = {{0, 1, 1}, {-2, 3, 4}, {8, -8.0, 9.0}};
+        landmarks.assign(fixed_landmarks.begin(), fixed_landmarks.begin() + num_landmarks);
+    }
+
+    g2o::SE3Quat gtPoseWG = createRandomSE3Increment(3, 30);
     cout << "Ground truth TWG (from G to W) " << gtPoseWG.toMinimalVector().transpose() << endl;
 
     vector<g2o::SE3Quat> vPose;
@@ -183,7 +201,7 @@ int main(int argc, char *argv[])
     for (int i = 1; i < num_pose; i++)
     {
         double translation_stddev = 1; // Standard deviation for translation
-        double rotation_stddev = .5;     // Standard deviation for rotation
+        double rotation_stddev = .5;   // Standard deviation for rotation
         g2o::SE3Quat random_increment = createRandomSE3Increment(translation_stddev, rotation_stddev);
         g2o::SE3Quat p = random_increment * vPose[i - 1];
         cout << i << "th GT pose: " << random_increment.toMinimalVector().transpose() << endl;
@@ -204,8 +222,12 @@ int main(int argc, char *argv[])
     g2o::VertexSE3Expmap *Twg = new g2o::VertexSE3Expmap();
     Twg->setId(-1);
     // initializing the tf with a possible initial value
-    Twg->setEstimate(createRandomSE3Increment(1, 1)*gtPoseWG);
-    optimizer.addVertex(Twg);
+    Twg->setEstimate(createRandomSE3Increment(2, 10) * gtPoseWG);
+
+    if (addToAFactors)
+    {
+        optimizer.addVertex(Twg);
+    }
 
     for (int i = 0; i < num_pose; i++)
     {
@@ -221,10 +243,10 @@ int main(int argc, char *argv[])
         }
         else
         {
-            for (int j = i - 1; j >= max(i-10, 0); j--)
+            for (int j = i - 1; j >= max(i - 20, 0); j--)
             {
 
-                g2o::SE3Quat random_increment = createRandomSE3Increment(0.1, 0.1);
+                g2o::SE3Quat random_increment = createRandomSE3Increment(0.5, 0.5);
                 cout << "Random SE3 increment from node " << i << " to node " << j << ": " << random_increment.toMinimalVector().transpose() << endl;
                 g2o::SE3Quat meas = random_increment * currPose * vPose[j].inverse();
 
@@ -241,16 +263,19 @@ int main(int argc, char *argv[])
         }
         optimizer.addVertex(v);
 
-        for (const auto &l : landmarks)
+        if (addToAFactors)
         {
-            auto meas = genToANoise(.3) + (gtPoseWG.map(l) - currPose.translation()).norm();
-            ToaEdgeTr *e = new ToaEdgeTr();
-            e->setVertex(0, v);
-            e->setVertex(1, Twg);
-            e->setMeasurement(meas);
-            e->setLandmark(l);
-            e->setInformation(1 * Eigen::Matrix<double, 1, 1>::Identity());
-            optimizer.addEdge(e);
+            for (const auto &l : landmarks)
+            {
+                auto meas = genToANoise(.3) + (gtPoseWG.map(l) - currPose.translation()).norm();
+                ToaEdgeTr *e = new ToaEdgeTr();
+                e->setVertex(0, v);
+                e->setVertex(1, Twg);
+                e->setMeasurement(meas);
+                e->setLandmark(l);
+                e->setInformation(.1 * Eigen::Matrix<double, 1, 1>::Identity());
+                optimizer.addEdge(e);
+            }
         }
     }
 
@@ -259,28 +284,44 @@ int main(int argc, char *argv[])
     cout << "Number of edges: " << optimizer.edges().size() << endl;
     optimizer.initializeOptimization();
     optimizer.computeActiveErrors();
-    optimizer.optimize(50);
+    optimizer.optimize(100);
     optimizer.computeActiveErrors();
+
+    vector<g2o::Vector6d> errors;
+    errors.reserve(vPose.size());
 
     for (int i; i < vPose.size(); i++)
     {
         g2o::VertexSE3Expmap *v = dynamic_cast<g2o::VertexSE3Expmap *>(optimizer.vertex(i));
 
-        cout << i <<" - Ground Truth pose " << vPose[i].toMinimalVector().transpose() << endl;
+        cout << i << " - Ground Truth pose " << vPose[i].toMinimalVector().transpose() << endl;
         cout << i << " - Estimated pose " << v->estimate().toMinimalVector().transpose() << endl;
+        cout << endl;
+        errors.push_back((v->estimate() * vPose[i].inverse()).log());
     }
 
+    cout << "RMSE Poses: " << computeRMSE(errors) << endl;
+    cout << endl;
+
     // Printing the Transformation and it estimation
-    if (optimizer.vertices().find(-1) != optimizer.vertices().end())
+    if (addToAFactors)
     {
         g2o::VertexSE3Expmap *v = dynamic_cast<g2o::VertexSE3Expmap *>(optimizer.vertex(-1));
         cout << "Ground truth TWG: " << gtPoseWG.toMinimalVector().transpose() << endl;
         cout << "Estimated TWG: " << v->estimate().toMinimalVector().transpose() << endl;
+        cout << "RMSE TWG: " << computeRMSE({(v->estimate() * gtPoseWG.inverse()).log()}) << endl;
+        cout << endl;
     }
     else
     {
-        cout << "TWG Not added to optimizer" << endl;
+        cout << "ToA factors not added to optimizer" << endl;
     }
 
+    return 0;
+}
+
+int main(int argc, char *argv[])
+{
+    optimizeGraph();
     return 0;
 }
