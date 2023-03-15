@@ -46,10 +46,16 @@ public:
     ToaEdgeTr() {}
     void computeError() override
     {
+        //The first node is keyframe pose in camera frame, i.e., Tcw
+        //The second node contains the transformation from world to vicon, i.e., Twv
+        // Landmark is in the vicon frame, i.e., Tvl
         const g2o::VertexSE3Expmap *v0 = static_cast<const g2o::VertexSE3Expmap *>(_vertices[0]);
         const g2o::VertexSE3Expmap *v1 = static_cast<const g2o::VertexSE3Expmap *>(_vertices[1]);
         Eigen::Vector3d landmark_tr;
-        landmark_tr = v1->estimate().map(_landmark);
+        //Tcv = Tcw * Twv
+        auto Tcv = v0->estimate()*v1->estimate();
+        landmark_tr = Tcv.map(_landmark);
+        // landmark_tr = v1->estimate().map(_landmark);
         const Eigen::Vector3d &translation = v0->estimate().translation();
         double dEst = (translation - landmark_tr).norm();
         _error[0] = dEst - _measurement;
@@ -57,7 +63,7 @@ public:
         // cout<<"This is the translation: "<<translation<<endl;
         // // cout<<"This is the measurement: "<<_measurement<<endl;
         // cout<<"dEst TOAEdge unary: "<<dEst<<endl;
-        // cout<<"_error: "<<_error[0]<<endl;
+        cout<<"_error: "<<_error[0]<<endl;
         // cout<<"---------------------------------"<<endl;
     }
 
@@ -112,9 +118,9 @@ int main(int argc, char *argv[])
 
     Eigen::Quaterniond q2 = Eigen::Quaterniond(1, 0, 0, 0);
     Eigen::Vector3d t2 = Eigen::Vector3d(0, 0, 0);
-    g2o::SE3Quat T_OW(q2, t2);
+    g2o::SE3Quat Twv(q2, t2);
 
-    // vPose.push_back(T_OW);
+    // vPose.push_back(Twv);
 
     for (int i = 1; i < num_pose; i++)
     {
@@ -137,8 +143,8 @@ int main(int argc, char *argv[])
     // add the transformation vertex
     g2o::VertexSE3Expmap *vt = new g2o::VertexSE3Expmap();
     vt->setId(-1);
-    vt->setEstimate(g2o::SE3Quat());
-    vt->setEstimate(T_OW);
+    // vt->setEstimate(Twv);
+    vt->setEstimate(Twv);
     optimizer.addVertex(vt);
 
     int i = 0;
@@ -185,7 +191,8 @@ int main(int argc, char *argv[])
         {
             ////add the binary edges between those two vertices
             Eigen::Vector3d landmark(l[0], l[1], l[2]);
-            meas = (T_OW.map(landmark) - p.translation()).norm();
+            auto Tcv = p* Twv;
+            meas = (Tcv.map(landmark) - p.translation()).norm();
             ToaEdgeTr *e = new ToaEdgeTr();
             e->setVertex(0, optimizer.vertex(i));
             e->setVertex(1, optimizer.vertex(-1));
@@ -222,8 +229,8 @@ int main(int argc, char *argv[])
 
     //Printing the Transformation and it estimation 
     g2o::VertexSE3Expmap *v = dynamic_cast<g2o::VertexSE3Expmap *>(optimizer.vertex(-1));
-        cout << "Transformation GT " << endl
-             << vPose[i] << endl;
+        cout << "Transformation Twv (world-vicon) " << endl
+             << Twv << endl;
         cout << "Estimated Transformation " << endl
              << v->estimate() << endl;
 
@@ -238,7 +245,7 @@ cout<<"Testing the noise function for quaternion as well as two SE3 poses"<<endl
          <<q.coeffs() << endl;
     auto p_noisy = addSE3Noise(vPose[i], 0.1, 0.01);
     cout << "the pose " << endl
-             << T_OW << endl;
+             << Twv << endl;
         cout << "Noisy pose: " << endl
              << p_noisy << endl;
         cout<<"/////////////////////////////////////////"<<endl;     
