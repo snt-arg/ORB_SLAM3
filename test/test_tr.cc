@@ -155,18 +155,18 @@ int main(int argc, char *argv[])
     int num_pose = 50;
     int num_landmarks = 3;
     // manual initialization of the landmarks:
-    //    vector<Eigen::Vector3d> landmarks = {{0, 1, 1}, {-2, 3, 4}, {8, -8.0, 9.0}, {-17.0, -20.0, 2.0}};\
+    vector<Eigen::Vector3d> landmarks = {{0, 1, 1}, {-2, 3, 4}, {8, -8.0, 9.0}};\
     //random initialization of the landmarks:
-    vector<Eigen::Vector3d> landmarks;
-    landmarks.reserve(num_landmarks);
+    // vector<Eigen::Vector3d> landmarks;
+    // landmarks.reserve(num_landmarks);
 
-    // These are position of Li wrt G : Li -> G
-    for (int i = 0; i < num_landmarks; i++)
-    {
-        Eigen::Vector3d pos = createRandomLandmark(10);
-        cout << "Landmark " << i << " created at position: " << pos.transpose() << endl;
-        landmarks.push_back(pos);
-    }
+    // // These are position of Li wrt G : Li -> G
+    // for (int i = 0; i < num_landmarks; i++)
+    // {
+    //     Eigen::Vector3d pos = createRandomLandmark(10);
+    //     cout << "Landmark " << i << " created at position: " << pos.transpose() << endl;
+    //     landmarks.push_back(pos);
+    // }
 
     g2o::SE3Quat gtPoseWG = createRandomSE3Increment(50, 10);
     cout << "Ground truth TWG (from G to W) " << gtPoseWG.toMinimalVector().transpose() << endl;
