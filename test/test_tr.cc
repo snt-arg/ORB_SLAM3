@@ -56,8 +56,8 @@ public:
         auto Tcv = v0->estimate()*v1->estimate();
         landmark_tr = Tcv.map(_landmark);
         // landmark_tr = v1->estimate().map(_landmark);
-        const Eigen::Vector3d &translation = v0->estimate().translation();
-        double dEst = (translation - landmark_tr).norm();
+        // const Eigen::Vector3d &translation = v0->estimate().translation();
+        double dEst = landmark_tr.norm();
         _error[0] = dEst - _measurement;
         // cout<<"This is the landmark unary: "<<_landmark<<endl;
         // cout<<"This is the translation: "<<translation<<endl;
@@ -171,13 +171,14 @@ int main(int argc, char *argv[])
             g2o::VertexSE3Expmap *prev = dynamic_cast<g2o::VertexSE3Expmap *>(optimizer.vertex(i - 1));
             // TODO add some small noise here
             auto meas = p * vPose[i-1].inverse();
-            e->setMeasurement(addSE3Noise(meas, 0.1, 0.01));
+            // e->setMeasurement(addSE3Noise(meas, 0.001, 0.0001));
+            e->setMeasurement(meas);
             e->setInformation(0.01 * Eigen::Matrix<double, 6, 6>::Identity());
-            // optimizer.addEdge(e);
-
+            optimizer.addEdge(e);
             v->setEstimate(meas*prev->estimate());
         }
         optimizer.addVertex(v);
+        
         // add the edge for that vertex (not necessary), need to noisy measurements ....
         //  TODO: add the edge for that vertex
         //  ADD full pose Edge
@@ -192,7 +193,7 @@ int main(int argc, char *argv[])
             ////add the binary edges between those two vertices
             Eigen::Vector3d landmark(l[0], l[1], l[2]);
             auto Tcv = p* Twv;
-            meas = (Tcv.map(landmark) - p.translation()).norm();
+            meas = Tcv.map(landmark).norm();
             ToaEdgeTr *e = new ToaEdgeTr();
             e->setVertex(0, optimizer.vertex(i));
             e->setVertex(1, optimizer.vertex(-1));
@@ -221,6 +222,7 @@ int main(int argc, char *argv[])
     {
         g2o::VertexSE3Expmap *v = dynamic_cast<g2o::VertexSE3Expmap *>(optimizer.vertex(i));
 
+        cout<<"--------------------------------------------"<<endl;
         cout << "Ground Truth pose " << i << ":" << endl
              << vPose[i] << endl;
         cout << "Estimated pose " << i << ":" << endl
@@ -229,8 +231,9 @@ int main(int argc, char *argv[])
 
     //Printing the Transformation and it estimation 
     g2o::VertexSE3Expmap *v = dynamic_cast<g2o::VertexSE3Expmap *>(optimizer.vertex(-1));
+        cout<<"--------------------------------------------"<<endl;
         cout << "Transformation Twv (world-vicon) " << endl
-             << Twv << endl;
+             << Twv<< endl;
         cout << "Estimated Transformation " << endl
              << v->estimate() << endl;
 
