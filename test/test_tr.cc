@@ -182,8 +182,8 @@ int main(int argc, char *argv[])
     // These are poses in W frame use this to transform from W -> C
     for (int i = 1; i < num_pose; i++)
     {
-        double translation_stddev = 10; // Standard deviation for translation
-        double rotation_stddev = 5;     // Standard deviation for rotation
+        double translation_stddev = 1; // Standard deviation for translation
+        double rotation_stddev = .5;     // Standard deviation for rotation
         g2o::SE3Quat random_increment = createRandomSE3Increment(translation_stddev, rotation_stddev);
         g2o::SE3Quat p = random_increment * vPose[i - 1];
         cout << i << "th GT pose: " << random_increment.toMinimalVector().transpose() << endl;
@@ -203,7 +203,8 @@ int main(int argc, char *argv[])
     // add the transformation vertex from G to W initialized as the identity (wrong)
     g2o::VertexSE3Expmap *Twg = new g2o::VertexSE3Expmap();
     Twg->setId(-1);
-    Twg->setEstimate(origin_pose);
+    // initializing the tf with a possible initial value
+    Twg->setEstimate(createRandomSE3Increment(1, 1)*gtPoseWG);
     optimizer.addVertex(Twg);
 
     for (int i = 0; i < num_pose; i++)
@@ -223,7 +224,7 @@ int main(int argc, char *argv[])
             for (int j = i - 1; j >= max(i-10, 0); j--)
             {
 
-                g2o::SE3Quat random_increment = createRandomSE3Increment(0.3, 0.25);
+                g2o::SE3Quat random_increment = createRandomSE3Increment(0.1, 0.1);
                 cout << "Random SE3 increment from node " << i << " to node " << j << ": " << random_increment.toMinimalVector().transpose() << endl;
                 g2o::SE3Quat meas = random_increment * currPose * vPose[j].inverse();
 
@@ -232,7 +233,7 @@ int main(int argc, char *argv[])
 
                 g2o::EdgeSE3 *e = new g2o::EdgeSE3();
                 e->setMeasurement(meas);
-                e->setInformation(.1 * Eigen::Matrix<double, 6, 6>::Identity());
+                e->setInformation(.01 * Eigen::Matrix<double, 6, 6>::Identity());
                 e->setVertex(0, optimizer.vertex(j));
                 e->setVertex(1, v);
                 optimizer.addEdge(e);
@@ -242,7 +243,7 @@ int main(int argc, char *argv[])
 
         for (const auto &l : landmarks)
         {
-            auto meas = genToANoise(1) + (gtPoseWG.map(l) - currPose.translation()).norm();
+            auto meas = genToANoise(.3) + (gtPoseWG.map(l) - currPose.translation()).norm();
             ToaEdgeTr *e = new ToaEdgeTr();
             e->setVertex(0, v);
             e->setVertex(1, Twg);
