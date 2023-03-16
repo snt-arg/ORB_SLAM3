@@ -16,26 +16,7 @@
 #include "Thirdparty/g2o/g2o/core/robust_kernel_impl.h"
 #include "Thirdparty/g2o/g2o/solvers/linear_solver_dense.h"
 
-// Get the current time as a seed for the random number generator
-
-// #include "G2oTypes.h"
-// #include "Converter.h"
-
-// #include <mutex>
-
-// #include "OptimizableTypes.h"
-
-// #include <Toa.h>
-
-// using namespace ORB_SLAM3;
 using namespace std;
-using namespace Eigen;
-
-void OptimizeToa(int frameID, vector<double> vToa, g2o::SparseOptimizer &optimizer, bool bSim3 = true);
-
-g2o::SE3Quat addSE3Noise(const g2o::SE3Quat &se3, double trans_stddev, double rot_stddev);
-Eigen::Quaterniond generateQuaternionNoise(double stddev);
-double generateToaNoise(double stddev);
 class ToaEdgeTr : public g2o::BaseBinaryEdge<1, double, g2o::VertexSE3Expmap, g2o::VertexSE3Expmap>
 {
 
@@ -49,7 +30,7 @@ public:
         const g2o::VertexSE3Expmap *v0 = static_cast<const g2o::VertexSE3Expmap *>(_vertices[0]);
         const g2o::VertexSE3Expmap *v1 = static_cast<const g2o::VertexSE3Expmap *>(_vertices[1]);
         Eigen::Vector3d landmark_tr = v1->estimate().map(_landmark);
-        auto est_distance = (landmark_tr - v0->estimate().translation()).norm();
+        auto est_distance = (landmark_tr - v0->estimate().inverse().translation()).norm();
         _error[0] = est_distance - _measurement;
     }
 
@@ -164,7 +145,7 @@ double computeRMSE(const std::vector<g2o::Vector6d> &errors)
     return rmse;
 }
 
-int optimizeGraph(int num_pose = 500, int num_landmarks = 1, bool fixed_landmarks = true, bool addToAFactors = false)
+int optimizeGraph(int num_pose = 500, int num_landmarks = 1, double toaNoise = 0.1, bool fixed_landmarks = true, bool addToAFactors = true, bool generate_rnd_poses = true)
 {
     vector<Eigen::Vector3d> landmarks;
     landmarks.reserve(num_landmarks);
@@ -182,7 +163,7 @@ int optimizeGraph(int num_pose = 500, int num_landmarks = 1, bool fixed_landmark
     else
     {
         // manual initialization of the landmarks:
-        std::vector<Eigen::Vector3d> fixed_landmarks = {{0, 1, 1}, {-2, 3, 4}, {8, -8.0, 9.0}};
+        std::vector<Eigen::Vector3d> fixed_landmarks = {{0, 0, 0}, {-2, 3, 4}, {8, -8.0, 9.0}};
         landmarks.assign(fixed_landmarks.begin(), fixed_landmarks.begin() + num_landmarks);
     }
 
@@ -198,14 +179,17 @@ int optimizeGraph(int num_pose = 500, int num_landmarks = 1, bool fixed_landmark
     vPose.push_back(origin_pose);
 
     // These are poses in W frame use this to transform from W -> C
-    for (int i = 1; i < num_pose; i++)
+    if (generate_rnd_poses)
     {
-        double translation_stddev = 1; // Standard deviation for translation
-        double rotation_stddev = .5;   // Standard deviation for rotation
-        g2o::SE3Quat random_increment = createRandomSE3Increment(translation_stddev, rotation_stddev);
-        g2o::SE3Quat p = random_increment * vPose[i - 1];
-        cout << i << "th GT pose: " << random_increment.toMinimalVector().transpose() << endl;
-        vPose.push_back(p);
+        for (int i = 1; i < num_pose; i++)
+        {
+            double translation_stddev = 1; // Standard deviation for translation
+            double rotation_stddev = .5;   // Standard deviation for rotation
+            g2o::SE3Quat random_increment = createRandomSE3Increment(translation_stddev, rotation_stddev);
+            g2o::SE3Quat p = random_increment * vPose[i - 1];
+            cout << i << "th GT pose: " << random_increment.toMinimalVector().transpose() << endl;
+            vPose.push_back(p);
+        }
     }
 
     // Setup optimizer
@@ -267,7 +251,7 @@ int optimizeGraph(int num_pose = 500, int num_landmarks = 1, bool fixed_landmark
         {
             for (const auto &l : landmarks)
             {
-                auto meas = genToANoise(.3) + (gtPoseWG.map(l) - currPose.translation()).norm();
+                auto meas = genToANoise(.0) + (gtPoseWG.map(l) - currPose.inverse().translation()).norm();
                 ToaEdgeTr *e = new ToaEdgeTr();
                 e->setVertex(0, v);
                 e->setVertex(1, Twg);
