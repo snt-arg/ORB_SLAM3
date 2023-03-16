@@ -283,23 +283,23 @@ public:
     TOAVertexPose() {}
 
     void computeError() override {
-        
-        // VertexPose* VP = static_cast<VertexPose*>(optimizer.vertex(pKFi->mnId))
-        //Sophus::SE3f Tcw(VP->estimate().Rcw[0].cast<float>(), VP->estimate().tcw[0].cast<float>());
-
+        //Landmark is passed as Twl
+        //The node is Tcw
+        //The error would be the distance between twc and Twl
         const ORB_SLAM3::VertexPose* VP = static_cast<const ORB_SLAM3::VertexPose*>(_vertices[0]);
-        auto& translation = VP->estimate().tcw[0].cast<double>();
-        cout<<"This is the translation vertexPose: "<<translation<<endl;
-
-        double dEst = (translation - _landmark.cast<double>()).norm();
+        auto Twc = -VP->estimate().Rcw[0].transpose()*VP->estimate().tcw[0];
+        double dEst = (Twc - _landmark.cast<double>()).norm();
         _error[0] = dEst - _measurement;
 
 
-        std::cout<<"This is the landmark: "<<_landmark<<endl;
-        std::cout<<"This is the translation: "<<translation<<endl;
-        std::cout<<"This is the measurement: "<<_measurement<<endl;
-        std::cout<<"dEst TOAEdge SIM3: "<<dEst<<endl;
+        // std::cout<<"This is the landmark: "<<_landmark<<endl;
+        // std::cout<<"This is the translation: "<<translation<<endl;
+        // std::cout<<"This is the measurement: "<<_measurement<<endl;
+        // std::cout<<"dEst TOAEdge SIM3: "<<dEst<<endl;
+        // if (_error[0] < 0.1){
         std::cout<<"_error: "<<_error[0]<<endl;
+        // std::cout<<"This is the landmark: "<<_landmark<<endl;
+        // }
         
     }
 
@@ -318,7 +318,7 @@ public:
         return true;
     }
     // void setLandmark(vector<double> landmark) { _landmark = Eigen::Vector4f(landmark[0], landmark[1], landmark[2], 1); }
-    void setLandmark(vector<double> landmark) { _landmark = Eigen::Vector3d(landmark[0], landmark[1], landmark[2]); }
+    void setLandmark(Eigen::Vector4f landmark) { _landmark = Eigen::Vector3d(landmark(0), landmark(1), landmark(2)); }
     void setMeasurement(double measurement) { _measurement = measurement; }
     private:
     double _measurement;
@@ -347,25 +347,62 @@ public:
 
 // ///////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////my own code/////////////////////////////////////////
-static void OptimizeToa_vert(int frameID, std::vector<double> vToa,  g2o::SparseOptimizer& optimizer, bool bSim3 = true)
+static void OptimizeToa_vert(Map* pMap, KeyFrame* cpKF, std::vector<double> vToa,  g2o::SparseOptimizer& optimizer)
 {
-    // cout<<"frameID: "<<frameID<<endl;
-    // cout<<"Vtoa: "<<vToa[1]<<endl;
-    // cout<<"Vtoa: "<<vToa[2]<<endl;
-    // cout<<"Vtoa: "<<vToa[3]<<endl;
- optimizer.setVerbose(true);
-int lm_id = 0;   
-for (auto& m : vToa) {
-    lm_id ++;
-    // cout<<"this is the measurement: "<<m<<endl;
-    TOAVertexPose* e = new TOAVertexPose();
-    e->setMeasurement(m); 
-    e->setInformation(0.01*Eigen::Matrix<double, 1, 1>::Identity()); //TODO-msm here we assume the same uncertainty over all measurement 
-    e->setVertex(0,optimizer.vertex(frameID));
-    e->setLandmark(ToA::sBsPositions[lm_id-1]);
-    // e->setRobustKernel(new g2o::RobustKernelHuber());
-    optimizer.addEdge(e);   
-}
+    Eigen::Vector4f Tcl;
+    Eigen::Vector4f Twl; 
+
+
+    vector<KeyFrame*> vpKFs = pMap->GetAllKeyFrames();
+    sort(vpKFs.begin(),vpKFs.end(),KeyFrame::lId);
+    vector<double> meas;
+    meas.resize(3);
+
+    if (vToa.size() > 1)
+    {
+        Eigen::Vector4f Tc0Gt = Eigen::Vector4f(vToa[0], vToa[1], vToa[2], 1);
+        Eigen::Vector4f TwGt = vpKFs[0]->GetPose().inverse().matrix()*Tc0Gt;
+        // auto GT_wc = Twc0.rotationMatrix().cast<double>()*GT_c0c.cast<double>();
+        // cout<<"TWC0.rotationmatrix"<Twc0.rotationMatrix()<<endl;
+        // cout<<"GT_wco: "<<GT_c0c<<endl;
+        cout<<"tcw of the first keyframe"<<endl<<vpKFs[0]->GetPose().matrix()<<endl;
+        cout<<"twc of the first keyframe"<<endl<<vpKFs[0]->GetPose().inverse().matrix()<<endl;
+        cout<<"The Gt data that are read from the file"<<endl<<Tc0Gt<<endl;
+        cout<<"GT that are transfered to the new world:"<<endl<<TwGt<<endl;
+        cout<<"The keyframe Estimatation Twc: "<<endl<<cpKF->GetPose().inverse().matrix()<<endl;
+        cout<<"---------------------------------------"<<endl;
+    
+        int i = 0;
+        for (vector<double> l:ToA::sBsPositions){
+        meas[i] = (TwGt.cast<double>()- Eigen::Vector4d(l[0], l[1], l[2], 1)).norm();
+        cout<<"The measurement is: "<<meas[i]<<endl;
+        i++;
+        }
+    }
+
+
+
+
+
+//  optimizer.setVerbose(false);
+int lm_id = 0;  
+if (vToa.size() > 1) { 
+        // for (auto& m : vToa) {
+        for (auto& m : meas) {
+            lm_id ++;
+            // cout<<"this is the measurement: "<<m<<endl;
+            TOAVertexPose* e = new TOAVertexPose();
+            e->setMeasurement(m); 
+            e->setInformation(0.000000001*Eigen::Matrix<double, 1, 1>::Identity()); //TODO-msm here we assume the same uncertainty over all measurement 
+            e->setVertex(0,optimizer.vertex(cpKF->mnId));
+            Tcl = Eigen::Vector4f(ToA::sBsPositions[lm_id-1][0], ToA::sBsPositions[lm_id-1][1], ToA::sBsPositions[lm_id-1][2], 1);
+            // Twl = vpKFs[0]->GetPose().inverse().matrix()*Tcl;
+            // e->setLandmark(Twl);
+            e->setLandmark(Tcl);
+            // e->setRobustKernel(new g2o::RobustKernelHuber());
+            optimizer.addEdge(e);   
+        }
+    }
 }
 
 // ///////////////////////////////////////////////////////////////////////////////////////////
@@ -419,7 +456,30 @@ if(bSim3){
 
 // /////////////////////////////////////////////////////////////////////////
 // ////////////////////my own code/////////////////////////////////////////
+static void print_gt_vs_est(Map* pMap, KeyFrame* cpKF)
+{
+    //in the Toa folder, put the data.csv where the ground truth are transfomred to the camera frame
+    //  and then saved wrt to the initial start of the camera
+    // in this case pKF->Vtoa_ contains the x, y, z not toa measurements
+    vector<KeyFrame*> vpKFs = pMap->GetAllKeyFrames();
+    sort(vpKFs.begin(),vpKFs.end(),KeyFrame::lId);
+    // auto Tcw = vpKFs[0]->GetPose();
+    if (cpKF->vToa_.size() > 1)
+    {
+        Eigen::Vector4f Tc0Gt = Eigen::Vector4f(cpKF->vToa_[0], cpKF->vToa_[1], cpKF->vToa_[2], 1);
+        auto TcGt = vpKFs[0]->GetPose().inverse().matrix()*Tc0Gt;
+        // auto GT_wc = Twc0.rotationMatrix().cast<double>()*GT_c0c.cast<double>();
+        // cout<<"TWC0.rotationmatrix"<Twc0.rotationMatrix()<<endl;
+        // cout<<"GT_wco: "<<GT_c0c<<endl;
+        cout<<"tcw of the first keyframe"<<endl<<vpKFs[0]->GetPose().matrix()<<endl;
+        cout<<"twc of the first keyframe"<<endl<<vpKFs[0]->GetPose().inverse().matrix()<<endl;
+        cout<<"The Gt data that are read from the file"<<endl<<Tc0Gt<<endl;
+        cout<<"GT that are transfered to the new world:"<<endl<<TcGt<<endl;
+        cout<<"The keyframe Estimatation Twc: "<<endl<<cpKF->GetPose().inverse().matrix()<<endl;
+        cout<<"---------------------------------------"<<endl;
+    }
 
+}
 // ///////////////////////////////////////////////////////////////////////////////////////////
 
 
@@ -826,26 +886,11 @@ void Optimizer::FullInertialBA(Map *pMap, int its, const bool bFixLocal, const l
                 nNonFixed++;
             VP->setFixed(bFixed);
         }
-        // //////////////////Added to fix the first KF////////////////////////
-        // if (pKFi->mnId==0){
-        //     VP->setFixed(true);
-        //     cout<<"the first estimated pose is fixed"<<endl;
-        //     const auto& trc = VP->estimate().tcw[0];
-        //     const auto& qc = VP->estimate().Rcw[0];
-        //     // Eigen::Matrix<float, 3, 1> translation(trc);
-        //     // Eigen::Quaternion<float> rotation(0.5, 0.5, 0.0, 0.0);
-
-        //     const auto& trb = VP->estimate().twb;
-        //     const auto& qb = VP->estimate().Rwb;
-
-        //     cout<<"trc: "<<trc<<endl;
-        //     cout<<"qc: "<<qc<<endl;
-        //     cout<<"trb: "<<trb<<endl;
-        // }
-        // //////////////////Added to fix the first KF////////////////////////
         optimizer.addVertex(VP);
 
-    //    OptimizeToa_vert(pKFi->mnId, pKFi->vToa_,  optimizer,  true);
+        /////////////////////////////////////////////////////////////////////
+        OptimizeToa_vert(pMap, pKFi, pKFi->vToa_, optimizer);
+        /////////////////////////////////////////////////////////////////////
 
         if(pKFi->bImu)
         {
@@ -1287,59 +1332,8 @@ int Optimizer::PoseOptimization(Frame *pFrame)
 
 
 ////////////////////////////////////////////////////////////////////////
-OptimizeToa(0, pFrame->vToa_ , optimizer, false);
+// OptimizeToa(0, pFrame->vToa_ , optimizer, false);
 // ////////////////////my own code/////////////////////////////////////////
-// // This is for adding bs nodes with negative ID and binary edges
-//     int bs_counter = 0;
-//     for (auto& bs : ToA::sBsPositions){
-//         bs_counter--;
-//         VertexXYZ* vBs = new VertexXYZ();
-//         vBs->setEstimate(Eigen::Vector3d(bs[1], bs[2], bs[3]));
-//         vBs->setId(bs_counter);
-//         vBs ->setFixed(true);
-//         optimizer.addVertex(vBs);
-//  }
-
-// //This optimization is performed over just one frame,
-// //so here we just add one edge from each BS to this frame
-//         int frame_id = 0;
-//         int lm_id = 0;
-        
-// for (auto& m : pFrame->vToa_) {
-//     lm_id ++;
-//     // g2o::VertexXYZ* e = new g2o::EdgeSE3XYZ();
-//     EdgeDistance* e = new EdgeDistance();
-//     e->setMeasurement(m); //The index 0  is time-stamps so we start with the second one
-//     e->setInformation(Eigen::Matrix<double, 1, 1>::Identity());
-//     e->setVertex(0,optimizer.vertex(-lm_id));
-//     e->setVertex(1,optimizer.vertex(0));
-//     optimizer.addEdge(e);
-
-//     // e->vertices(1[0] = dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(-lm_id));
-//     // e->vertices()[1] = dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(frame_id));
-    
-    
-// }
-
-// /////////////////////////////////////////////////////////////////////////
-// ////////////////////my own code/////////////////////////////////////////
-// // This is for adding unary edge with no node for BS
-// //This optimization is performed over just one frame,
-// //so here we just add one edge from each BS to this frame
-//         int frame_id = 0;
-//         int lm_id = 0;
-        
-// for (auto& m : pFrame->vToa_) {
-//     lm_id ++;
-//     ToaEdgeUnary* e = new ToaEdgeUnary();
-//     e->setMeasurement(m); //The index 0  is time-stamps so we start with the second one
-//     e->setInformation(Eigen::Matrix<double, 1, 1>::Identity());
-//     e->setVertex(0,optimizer.vertex(frame_id));
-//     optimizer.addEdge(e);   
-    
-// }
-
-/////////////////////////////////////////////////////////////////////////
 
 
     for(int i=0; i<N; i++)
@@ -1985,6 +1979,7 @@ void Optimizer::LocalBundleAdjustment(KeyFrame *pKF, bool* pbStopFlag, Map* pMap
         g2o::SE3Quat SE3quat = vSE3->estimate();
         Sophus::SE3f Tiw(SE3quat.rotation().cast<float>(), SE3quat.translation().cast<float>());
         pKFi->SetPose(Tiw);
+
     }
 
     //Points
@@ -1997,6 +1992,13 @@ void Optimizer::LocalBundleAdjustment(KeyFrame *pKF, bool* pbStopFlag, Map* pMap
     }
 
     pMap->IncreaseChangeIndex();
+
+    //////////////////////////////////////////////////////////
+    // print_gt_vs_est(pMap, pKF);
+    /////////////////////////////////////////////////////////
+
+
+
 }
 
 
@@ -3117,7 +3119,9 @@ void Optimizer::LocalInertialBA(KeyFrame *pKF, bool *pbStopFlag, Map *pMap, int&
     //seems that fixed keyframe just can be used to imporve the mapping
     //as we do not localize BS (radio map), we do not use it here
     //TODO-msm: localInertialBA
-    // OptimizeToa(pKFi->mnId, pKFi->vToa_ , optimizer, false);
+    /////////////////////////////////////////////////////////////////////
+    OptimizeToa_vert(pMap, pKFi, pKFi->vToa_, optimizer);
+    /////////////////////////////////////////////////////////////////////
     // ////////////////////my own code/////////////////////////////////////////
 
         if(!pKFi->mPrevKF)
@@ -3478,7 +3482,11 @@ void Optimizer::LocalInertialBA(KeyFrame *pKF, bool *pbStopFlag, Map *pMap, int&
     }
 
     pMap->IncreaseChangeIndex();
+    //////////////////////////////////////////////////////////
+    // print_gt_vs_est(pMap, pKF);
+    /////////////////////////////////////////////////////////
 }
+
 
 Eigen::MatrixXd Optimizer::Marginalize(const Eigen::MatrixXd &H, const int &start, const int &end)
 {
@@ -5077,10 +5085,10 @@ int Optimizer::PoseInertialOptimizationLastKeyFrame(Frame *pFrame, bool bRecInit
     const float thHuberMono = sqrt(5.991);
     const float thHuberStereo = sqrt(7.815);
 
-////////////////////////////////////////////////////////////////////////
-//TODO-msm:poseinertialOPtimizationLastKeyframe
-// OptimizeToa(0, pFrame->vToa_ , optimizer, false);
-// ////////////////////my own code//////////////////////////////////////
+//////////////////////////////////////////////////////////////////////
+// TODO-msm:poseinertialOPtimizationLastKeyframe
+// OptimizeToa_vert(0, pFrame->vToa_ , optimizer);
+////////////////////my own code//////////////////////////////////////
 
     {
         unique_lock<mutex> lock(MapPoint::mGlobalMutex);
@@ -5369,6 +5377,19 @@ int Optimizer::PoseInertialOptimizationLastKeyFrame(Frame *pFrame, bool bRecInit
     Vector6d b;
     b << VG->estimate(), VA->estimate();
     pFrame->mImuBias = IMU::Bias(b[3],b[4],b[5],b[0],b[1],b[2]);
+
+            /////////////////////////////////////////////////////////////////////
+       // priinting the node optimized after PoseInertialOptimizationLastKeyFrame
+    //    const Eigen::Vector3d& trc = VP->estimate().tcw[0].cast<double>();
+    //    const Eigen::Vector3d& trb = VP->estimate().twb.cast<double>();
+
+    // //    double dEst = (tr - Eigen::Vector3d(ToA::sBsPositions[0][0], ToA::sBsPositions[0][1], ToA::sBsPositions[0][2]) ).norm();
+    //    cout<<"Translation (tcw[0]): "<<trc.transpose()<<endl;
+    //    cout<<"Translation (tcb): "<<trb.transpose()<<endl;
+    //     if (pFrame->vToa_.size() > 0)
+    //         cout<<"GT_c: "<<pFrame->vToa_[0]<< ','<<pFrame->vToa_[1]<< ','<<pFrame->vToa_[2]<<endl;
+    //    cout<<"------------------------------------------------------------"<<endl;
+        /////////////////////////////////////////////////////////////////////
 
     // Recover Hessian, marginalize keyFframe states and generate new prior for frame
     Eigen::Matrix<double,15,15> H;

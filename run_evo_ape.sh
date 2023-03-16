@@ -4,7 +4,7 @@
 
 ROOT_DIR="/home/meisam/ORB_SLAM3"
 DATA_FILE="$ROOT_DIR/Datasets/EuRoC/V101/mav0/vicon0/data.csv"
-OUTPUT_FILE1="$ROOT_DIR/results_tum_format/inertial/f_V101-imu_tum.txt" 
+OUTPUT_FILE1="$ROOT_DIR/results_tum_format/inertial/f_V101_imu_tum.txt" 
 OUTPUT_FILE2="$ROOT_DIR/results_tum_format/inertial/f_V101_inertial_tum.txt" 
 
 

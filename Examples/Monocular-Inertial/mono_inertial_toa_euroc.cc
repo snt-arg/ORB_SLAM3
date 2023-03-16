@@ -68,12 +68,12 @@ int main(int argc, char *argv[])
 //  [  2.22685959 -13.95944924  -5.34500278]
 // This is the landmark with constant transfromation 
 //  [9.49057943 6.95301033 4.60027992]
-
 //  [-2.87058525 -3.7868588   3.60676244]
 // This is the landmark with constant transfromation 
 //  [-13.71717786  -2.47631172  -5.70099874]
 // This is the landmark with constant transfromation 
 //  [ 7.03766778 -9.38880906  4.80875873]
+
 
 
 
