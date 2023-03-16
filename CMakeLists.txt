@@ -408,3 +408,10 @@ target_link_libraries(test_tr ${PROJECT_NAME})
 add_executable(toa_test
         test/toa_test.cc)
 target_link_libraries(toa_test ${PROJECT_NAME})
+
+add_executable(loosely_coupled_estimation
+        test/loosely_coupled_estimation.cc)
+target_link_libraries(loosely_coupled_estimation ${PROJECT_NAME})
+
+
+
