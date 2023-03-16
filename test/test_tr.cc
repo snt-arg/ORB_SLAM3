@@ -145,7 +145,7 @@ double computeRMSE(const std::vector<g2o::Vector6d> &errors)
     return rmse;
 }
 
-int optimizeGraph(int num_pose = 500, int num_landmarks = 1, double toaNoise = 0.1, bool fixed_landmarks = true, bool addToAFactors = true, bool generate_rnd_poses = true)
+int optimizeGraph(int num_pose = 100, int num_landmarks = 1, double toaNoise = 0.1, bool fixed_landmarks = true, bool addToAFactors = true, bool generate_rnd_poses = true)
 {
     vector<Eigen::Vector3d> landmarks;
     landmarks.reserve(num_landmarks);
@@ -251,7 +251,7 @@ int optimizeGraph(int num_pose = 500, int num_landmarks = 1, double toaNoise = 0
         {
             for (const auto &l : landmarks)
             {
-                auto meas = genToANoise(.0) + (gtPoseWG.map(l) - currPose.inverse().translation()).norm();
+                auto meas = genToANoise(toaNoise) + (gtPoseWG.map(l) - currPose.inverse().translation()).norm();
                 ToaEdgeTr *e = new ToaEdgeTr();
                 e->setVertex(0, v);
                 e->setVertex(1, Twg);
