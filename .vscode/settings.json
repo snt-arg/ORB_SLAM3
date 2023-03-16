@@ -66,7 +66,20 @@
         "cinttypes": "cpp",
         "typeindex": "cpp",
         "typeinfo": "cpp",
-        "variant": "cpp"
+        "variant": "cpp",
+        "compare": "cpp",
+        "concepts": "cpp",
+        "regex": "cpp",
+        "numbers": "cpp",
+        "semaphore": "cpp",
+        "stop_token": "cpp",
+        "geometry": "cpp",
+        "stdvector": "cpp",
+        "core": "cpp",
+        "dense": "cpp",
+        "eigenvalues": "cpp",
+        "cholesky": "cpp",
+        "*.ipp": "cpp"
     },
     "cmake.configureOnOpen": true
 }
