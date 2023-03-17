@@ -243,11 +243,11 @@ g2o::SE3Quat LoadTransformedPoses(string path_to_gt, string path_to_est, vector<
 
     // Obtain the Transformation Twg and the Ground truth poses Gtbw
     //  Twg = Twb*Tbv*Tvg
-    g2o::SE3Quat Twg = vEstPose[0].inverse() * Tbv * vPoses_raw_associated[0].inverse();
+    g2o::SE3Quat Twg = vEstPose[0] * Tbv * vPoses_raw_associated[0].inverse();
     // replacing the ground truth poses with  Gtbw, world in body
     for (int i = 0; i < vPoses_raw_associated.size(); i++)
     {
-        vGtPose.push_back(Twg * vPoses_raw_associated[i] * Tbv.inverse());
+        vGtPose.push_back((Twg * vPoses_raw_associated[i] * Tbv.inverse()).inverse());
     }
     return Twg;
 }
@@ -297,6 +297,12 @@ int optimizeGraph(int num_pose = 500, int num_landmarks = 1, double toaNoise = 0
         cout << "size of the estimated poses: " << vEstPose.size() << endl;
         // NEW: change the value of num_pose
         num_pose = vEstPose.size();
+        //check if the transformation is correct or not but printing the error between the estimation and the ground truth
+        for (int i = 0; i < num_pose; i++)
+        {
+            //vEstPose[i]*vGtPose[i] does not result in zero error, but the other way around does!!!!???
+            cout<< "The error between estimation and ground truth is: " << endl<<(vGtPose[i]*vEstPose[i]).toVector().transpose() << endl;
+        }
     }
     cout << "Ground truth TWG (from G to W) " << gtPoseWG.toMinimalVector().transpose() << endl;
 
