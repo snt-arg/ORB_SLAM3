@@ -81,6 +81,7 @@ private:
     g2o::SE3Quat _measurement;
 };
 
+//NEW
 int LoadPoses(const string strToaPath, vector<double> &TimeStamps,
               vector<vector<double>> &poses, bool bEurocStyle = true)
 {
@@ -209,6 +210,7 @@ double computeRMSE(const std::vector<g2o::Vector6d> &errors)
 
 int optimizeGraph(int num_pose = 500, int num_landmarks = 1, double toaNoise = 0.1, bool fixed_landmarks = true, bool addToAFactors = true, bool generate_rnd_poses = false)
 {
+    // NEW
     // Gt poses are vicon with respect the the G world frame (Tgv)
     // so the distance between the Gtposes and landmark, would be the distance between the vicon and the landmark
     // However, the keyframe are poses of the body frame with respect to the world.
@@ -221,17 +223,21 @@ int optimizeGraph(int num_pose = 500, int num_landmarks = 1, double toaNoise = 0
     g2o::SE3Quat Tbv(Eigen::Matrix3d(Tbv_matrix.block<3, 3>(0, 0)), Eigen::Vector3d(Tbv_matrix.block<3, 1>(0, 3)));
 
     // loading ground truth poses and ORBSLAM pose estimates
+    // TODO: there is no need to create GtPoses there is already vPose. Avoid to create many new if possible. Please also use the same or similar naming convention with lower letters
     vector<vector<double>> GtPoses;
     vector<double> gtPoseTimeStamps;
     int Gtposes_ind(0);
     string gtPath = "Datasets/EuRoC/V101/mav0/vicon0/data.csv";
-
+    // TODO:  Please also use the same or similar naming convention with lower letters. Avoid variables not needed.
     vector<vector<double>> EstPoses;
     vector<double> EstPoseTimeStamps;
-    string EstPath = "Results_baseline/euroc_inertial/kf_V101_inertial.txt";
+    // NOTE: load estimates from every frame not only key-frames
+    string EstPath = "Results_baseline/euroc_inertial/f_V101_inertial.txt";
 
+    // TODO: here you should load poses directly as vector<g2o::SE3Quat> in the format Tbw, use the associate.py function to obtain directly the gt pose for every estimated frame ( no asosciation has to be done here atm)
     LoadPoses(gtPath, gtPoseTimeStamps, GtPoses, true);
     LoadPoses(EstPath, EstPoseTimeStamps, EstPoses, false);
+    // TODO: print as done below
     cout << "print the first vector of Gtposes:" << GtPoses[0][0] << GtPoses[0][1] << GtPoses[0][2] << GtPoses[0][3] << GtPoses[0][4] << GtPoses[0][5] << GtPoses[0][6] << endl;
     cout << "print the first vector of EstPoses:" << EstPoses[0][0] << EstPoses[0][1] << EstPoses[0][2] << EstPoses[0][3] << EstPoses[0][4] << EstPoses[0][5] << EstPoses[0][6] << endl;
 
@@ -250,27 +256,35 @@ int optimizeGraph(int num_pose = 500, int num_landmarks = 1, double toaNoise = 0
     }
     else
     {
-        // manual initialization of the landmarks:
+        // manual initialization of the landmarks
+        // TODO set landmarks to where you would actually place them inside the dataset (i.e., wrt vicon coord frame)
         std::vector<Eigen::Vector3d> fixed_landmarks = {{0, 0, 0}, {-2, 3, 4}, {8, -8.0, 9.0}};
-        landmarks.assign(fixed_landmarks.begin(), fixed_landmarks.begin() + num_landmarks);
+        landmarks.assign(fixed_landmarks.begin(), fixed_landmarks.begin() + min(num_landmarks, 3));
     }
 
     g2o::SE3Quat gtPoseWG = createRandomSE3Increment(3, 30);
     cout << "Ground truth TWG (from G to W) " << gtPoseWG.toMinimalVector().transpose() << endl;
 
-    // change the value of numpose
+    // NEW: change the value of num_pose
     if (!generate_rnd_poses)
     {
         num_pose = EstPoses.size();
     }
+
+    // TODO: as above you create too many variables start to be confusing. If you can reuse the existing. and vPose are ground truth poses already
     vector<g2o::SE3Quat> vGtPose;
     vector<g2o::SE3Quat> vPose;
+    // TODO no need of measurments for example, delete
     vector<vector<double>> measurements;
     vPose.reserve(num_pose);
+
 
     // These are poses in W frame use this to transform from W -> C
     if (generate_rnd_poses)
     {
+    // Create g2o::SE3Quat object with identity rotation and zero translation
+    g2o::SE3Quat origin_pose;
+    vPose.push_back(origin_pose);
         for (int i = 1; i < num_pose; i++)
         {
             double translation_stddev = 1; // Standard deviation for translation
@@ -281,6 +295,8 @@ int optimizeGraph(int num_pose = 500, int num_landmarks = 1, double toaNoise = 0
             vPose.push_back(p);
         }
     }
+    //NEW
+    // TODO: here you should have the load functions! and use them to initialize vector<g2o::SE3Quat> vPose (this is the gt vector not the estimate in the example code) and another for the estimates
     else
     {
         for (int i = 0; i < num_pose; i++)
@@ -303,11 +319,18 @@ int optimizeGraph(int num_pose = 500, int num_landmarks = 1, double toaNoise = 0
     optimizer.setAlgorithm(solver);
     optimizer.setVerbose(false);
 
-    // add the transformation vertex from G to W initialized as the identity (wrong)
+
     g2o::VertexSE3Expmap *Twg = new g2o::VertexSE3Expmap();
     Twg->setId(-1);
+
     // initializing the tf with a possible initial value
+     if (generate_rnd_poses)
+    {
     Twg->setEstimate(createRandomSE3Increment(2, 10) * gtPoseWG);
+    }
+    else{
+        // TODO: put the real transformation from VICON to the estimates origin. This is what TWG represents
+    }
 
     if (addToAFactors)
     {
@@ -318,11 +341,19 @@ int optimizeGraph(int num_pose = 500, int num_landmarks = 1, double toaNoise = 0
     {
 
         g2o::SE3Quat currPose = vPose[i];
+        // TODO: currPose is the GtPose already
         g2o::SE3Quat currGtPose;
+
+        // TODO: this is better do it in the load or even before, here is a mess
         // find the Groud truth pose corresponding to the current (estimated) pose based on the timestamp
         while (gtPoseTimeStamps[Gtposes_ind] < EstPoseTimeStamps[i])
         {
             Gtposes_ind++;
+            //TGv
+            currGtPose = g2o::SE3Quat(Eigen::Quaterniond(GtPoses[Gtposes_ind][3], GtPoses[Gtposes_ind][4],
+                                     GtPoses[Gtposes_ind][5], GtPoses[Gtposes_ind][6]), Eigen::Vector3d(GtPoses[Gtposes_ind][0], GtPoses[Gtposes_ind][1], GtPoses[Gtposes_ind][2]));
+            //Tgb
+            currGtPose = currGtPose*Tbv.inverse();
         }
         // TGv
         currGtPose = g2o::SE3Quat(Eigen::Quaterniond(GtPoses[Gtposes_ind][3], GtPoses[Gtposes_ind][4],
@@ -341,12 +372,14 @@ int optimizeGraph(int num_pose = 500, int num_landmarks = 1, double toaNoise = 0
         }
         else
         {
+            // TODO there is no need of having an edge with previous 20 poses with the real data, change this
             for (int j = i - 1; j >= max(i - 20, 0); j--)
             {
 
                 g2o::SE3Quat random_increment = createRandomSE3Increment(0.5, 0.5);
                 cout << "Random SE3 increment from node " << i << " to node " << j << ": " << random_increment.toMinimalVector().transpose() << endl;
                 g2o::SE3Quat meas = random_increment * currPose * vPose[j].inverse();
+                // TODO please do an if else, no need of random increment;
                 if (!generate_rnd_poses)
                 {
                     meas = currPose * vPose[j].inverse();
@@ -357,6 +390,7 @@ int optimizeGraph(int num_pose = 500, int num_landmarks = 1, double toaNoise = 0
 
                 g2o::EdgeSE3 *e = new g2o::EdgeSE3();
                 e->setMeasurement(meas);
+                // TODO: add a variable for the information matrix of the poses
                 e->setInformation(.01 * Eigen::Matrix<double, 6, 6>::Identity());
                 e->setVertex(0, optimizer.vertex(j));
                 e->setVertex(1, v);
@@ -369,17 +403,19 @@ int optimizeGraph(int num_pose = 500, int num_landmarks = 1, double toaNoise = 0
         {
             for (const auto &l : landmarks)
             {
-                auto meas = genToANoise(.0) + (gtPoseWG.map(l) - currPose.inverse().translation()).norm();
-                if (!generate_rnd_poses)
-                {
-                    // both landmark and Gt poses are the in G frame, so no need for transformation
-                    meas = genToANoise(.0) + (l - currGtPose.translation()).norm();
-                }
+                auto meas = genToANoise(toaNoise) + (gtPoseWG.map(l) - currPose.inverse().translation()).norm();
+                // TODO: this should not be added with are still generating ToA measurments randomly from gt and currPose and gtPoseWg are all you should need for the generation atm
+                // if (!generate_rnd_poses)
+                // {
+                //     // both landmark and Gt poses are the in G frame, so no need for transformation
+                //     meas = genToANoise(toaNoise) + (l - currGtPose.translation()).norm();
+                // }
                 ToaEdgeTr *e = new ToaEdgeTr();
                 e->setVertex(0, v);
                 e->setVertex(1, Twg);
                 e->setMeasurement(meas);
                 e->setLandmark(l);
+                // TODO: add a variable for the information matrix of the poses
                 e->setInformation(.1 * Eigen::Matrix<double, 1, 1>::Identity());
                 optimizer.addEdge(e);
             }
@@ -423,7 +459,7 @@ int optimizeGraph(int num_pose = 500, int num_landmarks = 1, double toaNoise = 0
     {
         cout << "ToA factors not added to optimizer" << endl;
     }
-
+    // TODO: return the poses rmse and the Twg rmse for comapring multiple runs. you can return a value here or set a passed reference if you prefer.
     return 0;
 }
 
