@@ -218,10 +218,9 @@ int optimizeGraph(int num_pose = 500, int num_landmarks = 1, double toaNoise = 0
         -0.02078, -0.99972, -0.01114, -0.02781,
         0.94150, -0.01582, -0.33665, -0.12395,
         0.0, 0.0, 0.0, 1.0;
-    g2o::SE3Quat Tbv(Eigen::Matrix3d(Tbv_matrix.block<3,3>(0,0)), Eigen::Vector3d(Tbv_matrix.block<3,1>(0,3)));
+    g2o::SE3Quat Tbv(Eigen::Matrix3d(Tbv_matrix.block<3, 3>(0, 0)), Eigen::Vector3d(Tbv_matrix.block<3, 1>(0, 3)));
 
-
-    // loading ground truth poses and pose estimates
+    // loading ground truth poses and ORBSLAM pose estimates
     vector<vector<double>> GtPoses;
     vector<double> gtPoseTimeStamps;
     int Gtposes_ind(0);
@@ -320,16 +319,17 @@ int optimizeGraph(int num_pose = 500, int num_landmarks = 1, double toaNoise = 0
 
         g2o::SE3Quat currPose = vPose[i];
         g2o::SE3Quat currGtPose;
-        // find the Groud truth poses corresponding the the current (estimated) pose based on the timestamp
-        if (gtPoseTimeStamps[Gtposes_ind] < EstPoseTimeStamps[i])
+        // find the Groud truth pose corresponding to the current (estimated) pose based on the timestamp
+        while (gtPoseTimeStamps[Gtposes_ind] < EstPoseTimeStamps[i])
         {
             Gtposes_ind++;
-            //TGv
-            currGtPose = g2o::SE3Quat(Eigen::Quaterniond(GtPoses[Gtposes_ind][3], GtPoses[Gtposes_ind][4],
-                                     GtPoses[Gtposes_ind][5], GtPoses[Gtposes_ind][6]), Eigen::Vector3d(GtPoses[Gtposes_ind][0], GtPoses[Gtposes_ind][1], GtPoses[Gtposes_ind][2]));
-            //Tgb
-            currGtPose = currGtPose*Tbv.inverse();                          
         }
+        // TGv
+        currGtPose = g2o::SE3Quat(Eigen::Quaterniond(GtPoses[Gtposes_ind][3], GtPoses[Gtposes_ind][4],
+                                                     GtPoses[Gtposes_ind][5], GtPoses[Gtposes_ind][6]),
+                                  Eigen::Vector3d(GtPoses[Gtposes_ind][0], GtPoses[Gtposes_ind][1], GtPoses[Gtposes_ind][2]));
+        // Tgb
+        currGtPose = currGtPose * Tbv.inverse();
 
         // add the keyframe vertex
         g2o::VertexSE3Expmap *v = new g2o::VertexSE3Expmap();
@@ -373,7 +373,7 @@ int optimizeGraph(int num_pose = 500, int num_landmarks = 1, double toaNoise = 0
                 if (!generate_rnd_poses)
                 {
                     // both landmark and Gt poses are the in G frame, so no need for transformation
-                    meas = genToANoise(.0)+(l - currGtPose.translation()).norm();
+                    meas = genToANoise(.0) + (l - currGtPose.translation()).norm();
                 }
                 ToaEdgeTr *e = new ToaEdgeTr();
                 e->setVertex(0, v);
