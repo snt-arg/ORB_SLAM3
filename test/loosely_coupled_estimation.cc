@@ -242,15 +242,16 @@ int LoadTransformedPoses(string path_to_gt, string path_to_est, vector<g2o::SE3Q
             gtPosesInd++;
         }
         // replacing the ground truth poses with  Tbg, ground in body
-        vGtPose.push_back((gtPose_raw[gtPosesInd].inverse() * Tbv.inverse()).inverse());
+        vGtPose.push_back((gtPose_raw[gtPosesInd] * Tbv.inverse()).inverse());
+        vEstPose[i] = vEstPose[i].inverse();
     }
     // Obtain the Transformation Twg from the Ground truth to Odom World centres
     //  Twg = Twb*Tbg
-    Twg = vEstPose[0] * vGtPose[0];
+    Twg = vEstPose[0].inverse() * vGtPose[0];
     return 0;
 }
 
-int optimizeGraph(int num_pose = 500, int num_landmarks = 1, double toaNoise = 0.1, bool fixed_landmarks = true, bool addToAFactors = true, bool generate_rnd_poses = false)
+int optimizeGraph(int num_pose = 500, int num_landmarks = 1, double toaNoise = 0.1, bool fixed_landmarks = true, bool addToAFactors = false, bool generate_rnd_poses = false)
 {
 
     vector<g2o::SE3Quat> vGtPose;
@@ -260,9 +261,9 @@ int optimizeGraph(int num_pose = 500, int num_landmarks = 1, double toaNoise = 0
     if (!generate_rnd_poses)
     {
         // TODO: load file in a more general way (no hardcoded path). it does not work for me because the working dir is inside the test folder. Also, Datasets folder does not exits in the code.
-        string gtPath = "Datasets/EuRoC/V101/mav0/vicon0/data.csv";
+        string gtPath = "../data.csv";
         // NOTE: load estimates from every frame not only key-frames
-        string estPath = "Results_baseline/euroc_inertial/f_V101_inertial.txt";
+        string estPath = "../f_V101_inertial.txt";
         int err = LoadTransformedPoses(gtPath, estPath, vGtPose, vEstPose, gtPoseWG);
         if (err)
             return 1;
@@ -278,14 +279,8 @@ int optimizeGraph(int num_pose = 500, int num_landmarks = 1, double toaNoise = 0
         {
             // vEstPose[i]*vGtPose[i] does not result in zero error, but the other way around does!!!!???
             //  CLAUDIO: vEstPose[i]*vGtPose[i] should not be identity. The error of the estimation should be vEstPose[i]*gtPoseWG*vGtPose[i].inverse(), which is identity only in case of perfect odometry
-            // cout << "The error between estimation and ground truth is: " << endl
-            //      << (vEstPose[i] * gtPoseWG * vGtPose[i].inverse()).toVector().transpose() << endl;
-
-                //              cout << "The error between estimation and ground truth is: " << endl
-                //  << (gtPoseWG * vGtPose[i].inverse()*vEstPose[i].inverse()).toVector().transpose() << endl;
-
-                                             cout << "The error between estimation and ground truth is: " << endl
-                 << (vEstPose[i]*vGtPose[i]*gtPoseWG.inverse()).toVector().transpose() << endl;
+            cout << "The error between estimation and ground truth is: " << endl
+                 << (vEstPose[i]* gtPoseWG * vGtPose[i].inverse()).toVector().transpose() << endl;
         }
     }
     else
@@ -396,10 +391,10 @@ int optimizeGraph(int num_pose = 500, int num_landmarks = 1, double toaNoise = 0
         {
             for (const auto &l : landmarks)
             {
-                //Measurement is the distance between the landmark and the GT
-                //currposes is Tbg, and l is Tgl, so we just convert tgb->Tgb and subtract them and take norm as both of them are in the same frame (G)
-                //However, in ToAEdgeTr, as the node is Twb, we need transformation, to transform the landmark to the world. 
-                auto meas = genToANoise(toaNoise) + (currPose.inverse().translation() -l).norm();
+                // Measurement is the distance between the landmark and the GT
+                // currposes is Tbg, and l is Tgl, so we just convert tgb->Tgb and subtract them and take norm as both of them are in the same frame (G)
+                // However, in ToAEdgeTr, as the node is Twb, we need transformation, to transform the landmark to the world.
+                auto meas = genToANoise(toaNoise) + currPose.map(l).norm();
                 ToaEdgeTr *e = new ToaEdgeTr();
                 e->setVertex(0, v);
                 e->setVertex(1, Twg);
@@ -427,11 +422,10 @@ int optimizeGraph(int num_pose = 500, int num_landmarks = 1, double toaNoise = 0
     {
         g2o::VertexSE3Expmap *v = dynamic_cast<g2o::VertexSE3Expmap *>(optimizer.vertex(i));
 
-        cout << i << " - Ground Truth pose " << (gtPoseWG*vGtPose[i].inverse()).toMinimalVector().transpose() << endl;
+        cout << i << " - Ground Truth pose " << (gtPoseWG * vGtPose[i].inverse()).toMinimalVector().transpose() << endl;
         cout << i << " - Estimated pose " << v->estimate().toMinimalVector().transpose() << endl;
-        cout << endl;
-        // errors.push_back((gtPoseWG.inverse() * v->estimate() * vGtPose[i].inverse()).log());
-        errors.push_back((v->estimate() * vGtPose[i].inverse()*gtPoseWG.inverse()).log());
+        cout << endl;        // errors.push_back((gtPoseWG.inverse() * v->estimate() * vGtPose[i].inverse()).log());
+        errors.push_back((v->estimate() * gtPoseWG * vGtPose[i].inverse()).log());
     }
 
     cout << "RMSE Poses: " << computeRMSE(errors) << endl;
