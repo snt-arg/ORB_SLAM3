@@ -32,8 +32,8 @@ public:
     void computeError() override
     {
         // The first node is keyframe pose in camera frame, i.e., Tcw
-        // The second node contains the transformation from world to vicon, i.e., Twv
-        //  Landmark is in the vicon frame, i.e., Tvl
+        // The second node contains the transformation from world to ground, i.e., Twg
+        //  Landmark is in the vicon frame, i.e., Tgl
         const g2o::VertexSE3Expmap *v0 = static_cast<const g2o::VertexSE3Expmap *>(_vertices[0]);
         const g2o::VertexSE3Expmap *v1 = static_cast<const g2o::VertexSE3Expmap *>(_vertices[1]);
         Eigen::Vector3d landmark_tr = (v0->estimate() * v1->estimate()).map(_landmark);
@@ -225,7 +225,7 @@ int LoadTransformedPoses(string path_to_gt, string path_to_est, vector<g2o::SE3Q
     if (err)
         return 1;
     // loading ground truth poses of euroc mav, Gtgv is vicon in the ground
-    // gtPose_raw are vicon in the ground and estPoses are world in body
+    // gtPose_raw are vicon in the ground and estPoses are body in the world
     vector<g2o::SE3Quat> gtPose_raw; // gtPose_raw are vicon in the ground
     vector<double> gtPosesTimeStamps;
     // TODO: check 100 times that gtPose_raw are TGV and not viceversa
@@ -242,11 +242,11 @@ int LoadTransformedPoses(string path_to_gt, string path_to_est, vector<g2o::SE3Q
             gtPosesInd++;
         }
         // replacing the ground truth poses with  Tbg, ground in body
-        vGtPose.push_back((gtPose_raw[gtPosesInd] * Tbv.inverse()).inverse());
+        vGtPose.push_back((gtPose_raw[gtPosesInd].inverse() * Tbv.inverse()).inverse());
     }
     // Obtain the Transformation Twg from the Ground truth to Odom World centres
     //  Twg = Twb*Tbg
-    Twg = vEstPose[0].inverse() * vGtPose[0];
+    Twg = vEstPose[0] * vGtPose[0];
     return 0;
 }
 
@@ -278,8 +278,14 @@ int optimizeGraph(int num_pose = 500, int num_landmarks = 1, double toaNoise = 0
         {
             // vEstPose[i]*vGtPose[i] does not result in zero error, but the other way around does!!!!???
             //  CLAUDIO: vEstPose[i]*vGtPose[i] should not be identity. The error of the estimation should be vEstPose[i]*gtPoseWG*vGtPose[i].inverse(), which is identity only in case of perfect odometry
-            cout << "The error between estimation and ground truth is: " << endl
-                 << (vEstPose[i] * gtPoseWG * vGtPose[i].inverse()).toMinimalVector().transpose() << endl;
+            // cout << "The error between estimation and ground truth is: " << endl
+            //      << (vEstPose[i] * gtPoseWG * vGtPose[i].inverse()).toVector().transpose() << endl;
+
+                //              cout << "The error between estimation and ground truth is: " << endl
+                //  << (gtPoseWG * vGtPose[i].inverse()*vEstPose[i].inverse()).toVector().transpose() << endl;
+
+                                             cout << "The error between estimation and ground truth is: " << endl
+                 << (vEstPose[i]*vGtPose[i]*gtPoseWG.inverse()).toVector().transpose() << endl;
         }
     }
     else
@@ -390,7 +396,10 @@ int optimizeGraph(int num_pose = 500, int num_landmarks = 1, double toaNoise = 0
         {
             for (const auto &l : landmarks)
             {
-                auto meas = genToANoise(toaNoise) + currPose.map(l).norm();
+                //Measurement is the distance between the landmark and the GT
+                //currposes is Tbg, and l is Tgl, so we just convert tgb->Tgb and subtract them and take norm as both of them are in the same frame (G)
+                //However, in ToAEdgeTr, as the node is Twb, we need transformation, to transform the landmark to the world. 
+                auto meas = genToANoise(toaNoise) + (currPose.inverse().translation() -l).norm();
                 ToaEdgeTr *e = new ToaEdgeTr();
                 e->setVertex(0, v);
                 e->setVertex(1, Twg);
@@ -418,10 +427,11 @@ int optimizeGraph(int num_pose = 500, int num_landmarks = 1, double toaNoise = 0
     {
         g2o::VertexSE3Expmap *v = dynamic_cast<g2o::VertexSE3Expmap *>(optimizer.vertex(i));
 
-        cout << i << " - Ground Truth pose " << vGtPose[i].toMinimalVector().transpose() << endl;
+        cout << i << " - Ground Truth pose " << (gtPoseWG*vGtPose[i].inverse()).toMinimalVector().transpose() << endl;
         cout << i << " - Estimated pose " << v->estimate().toMinimalVector().transpose() << endl;
         cout << endl;
-        errors.push_back((gtPoseWG.inverse() * v->estimate() * vGtPose[i].inverse()).log());
+        // errors.push_back((gtPoseWG.inverse() * v->estimate() * vGtPose[i].inverse()).log());
+        errors.push_back((v->estimate() * vGtPose[i].inverse()*gtPoseWG.inverse()).log());
     }
 
     cout << "RMSE Poses: " << computeRMSE(errors) << endl;
