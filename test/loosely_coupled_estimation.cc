@@ -36,8 +36,8 @@ public:
         //  Landmark is in the vicon frame, i.e., Tvl
         const g2o::VertexSE3Expmap *v0 = static_cast<const g2o::VertexSE3Expmap *>(_vertices[0]);
         const g2o::VertexSE3Expmap *v1 = static_cast<const g2o::VertexSE3Expmap *>(_vertices[1]);
-        Eigen::Vector3d landmark_tr = v1->estimate().map(_landmark);
-        auto est_distance = (landmark_tr - v0->estimate().inverse().translation()).norm();
+        Eigen::Vector3d landmark_tr = (v0->estimate() * v1->estimate()).map(_landmark);
+        auto est_distance = landmark_tr.norm();
         _error[0] = est_distance - _measurement;
     }
 
@@ -91,7 +91,7 @@ int LoadPoses(const string strToaPath, vector<double> &TimeStamps,
     // Check if the file was opened successfully
     if (!file.is_open())
     {
-        cout << "Failed to open file." << endl;
+        cout << "Failed to open file: " << strToaPath << endl;
         return 1;
     }
 
@@ -210,7 +210,7 @@ double computeRMSE(const std::vector<g2o::Vector6d> &errors)
     return rmse;
 }
 
-void LoadTransformedPoses(string path_to_gt, string path_to_est, vector<g2o::SE3Quat> &vGtPose, vector<g2o::SE3Quat> &vEstPose, g2o::SE3Quat &Twg)
+int LoadTransformedPoses(string path_to_gt, string path_to_est, vector<g2o::SE3Quat> &vGtPose, vector<g2o::SE3Quat> &vEstPose, g2o::SE3Quat &Twg)
 {
     Eigen::Matrix4d Tbv_matrix;
     Tbv_matrix << 0.33638, -0.01749, 0.94156, 0.06901,
@@ -221,14 +221,17 @@ void LoadTransformedPoses(string path_to_gt, string path_to_est, vector<g2o::SE3
     // loading the ORBSLAM pose estimates
     vector<double> estPosesTimeStamps;
     // TODO: check 100 times that vEstPose are TBW and not viceversa
-    LoadPoses(path_to_est, estPosesTimeStamps, vEstPose, false);
-
+    int err = LoadPoses(path_to_est, estPosesTimeStamps, vEstPose, false);
+    if (err)
+        return 1;
     // loading ground truth poses of euroc mav, Gtgv is vicon in the ground
     // gtPose_raw are vicon in the ground and estPoses are world in body
     vector<g2o::SE3Quat> gtPose_raw; // gtPose_raw are vicon in the ground
     vector<double> gtPosesTimeStamps;
     // TODO: check 100 times that gtPose_raw are TGV and not viceversa
-    LoadPoses(path_to_gt, gtPosesTimeStamps, gtPose_raw, true);
+    err = LoadPoses(path_to_gt, gtPosesTimeStamps, gtPose_raw, true);
+    if (err)
+        return 1;
 
     int gtPosesInd = 0;
     for (int i = 0; i < vEstPose.size(); i++)
@@ -238,14 +241,13 @@ void LoadTransformedPoses(string path_to_gt, string path_to_est, vector<g2o::SE3
         {
             gtPosesInd++;
         }
-        vPoses_raw_associated.push_back(gtPose_raw[gtPosesInd]);
         // replacing the ground truth poses with  Tbg, ground in body
-        // WRONG to add Twg in the Gt poses, these are given in the ground, not world, if not we would not need to estimate TWG
         vGtPose.push_back((gtPose_raw[gtPosesInd] * Tbv.inverse()).inverse());
     }
     // Obtain the Transformation Twg from the Ground truth to Odom World centres
     //  Twg = Twb*Tbg
     Twg = vEstPose[0].inverse() * vGtPose[0];
+    return 0;
 }
 
 int optimizeGraph(int num_pose = 500, int num_landmarks = 1, double toaNoise = 0.1, bool fixed_landmarks = true, bool addToAFactors = true, bool generate_rnd_poses = false)
@@ -257,10 +259,13 @@ int optimizeGraph(int num_pose = 500, int num_landmarks = 1, double toaNoise = 0
 
     if (!generate_rnd_poses)
     {
+        // TODO: load file in a more general way (no hardcoded path). it does not work for me because the working dir is inside the test folder. Also, Datasets folder does not exits in the code.
         string gtPath = "Datasets/EuRoC/V101/mav0/vicon0/data.csv";
         // NOTE: load estimates from every frame not only key-frames
         string estPath = "Results_baseline/euroc_inertial/f_V101_inertial.txt";
-        LoadTransformedPoses(gtPath, estPath, vGtPose, vEstPose, gtPoseWG);
+        int err = LoadTransformedPoses(gtPath, estPath, vGtPose, vEstPose, gtPoseWG);
+        if (err)
+            return 1;
 
         cout << "print the first vector of gtPose_raw: " << vGtPose[0].toMinimalVector().transpose() << endl;
         cout << "print the first vector of estPoses: " << vEstPose[0].toMinimalVector().transpose() << endl;
@@ -268,12 +273,13 @@ int optimizeGraph(int num_pose = 500, int num_landmarks = 1, double toaNoise = 0
         cout << "size of the estimated poses: " << vEstPose.size() << endl;
         // NEW: change the value of num_pose
         num_pose = vEstPose.size();
-        //check if the transformation is correct or not but printing the error between the estimation and the ground truth
+        // check if the transformation is correct or not but printing the error between the estimation and the ground truth
         for (int i = 0; i < num_pose; i++)
         {
-            //vEstPose[i]*vGtPose[i] does not result in zero error, but the other way around does!!!!???
-            // CLAUDIO: vEstPose[i]*vGtPose[i] should not be identity. The error of the estimation should be vEstPose[i]*gtPoseWG*vGtPose[i].inverse(), which is identity only in case of perfect odometry
-            cout<< "The error between estimation and ground truth is: " << endl<<(vEstPose[i]*gtPoseWG*vGtPose[i].inverse()).toMinimalVector().transpose() << endl;
+            // vEstPose[i]*vGtPose[i] does not result in zero error, but the other way around does!!!!???
+            //  CLAUDIO: vEstPose[i]*vGtPose[i] should not be identity. The error of the estimation should be vEstPose[i]*gtPoseWG*vGtPose[i].inverse(), which is identity only in case of perfect odometry
+            cout << "The error between estimation and ground truth is: " << endl
+                 << (vEstPose[i] * gtPoseWG * vGtPose[i].inverse()).toMinimalVector().transpose() << endl;
         }
     }
     else
@@ -300,7 +306,7 @@ int optimizeGraph(int num_pose = 500, int num_landmarks = 1, double toaNoise = 0
         // manual initialization of the landmarks
         // TODO set landmarks to where you would actually place them inside the dataset (i.e., wrt vicon coord frame)
         std::vector<Eigen::Vector3d> fixed_landmarks = {{5, 6, 3}, {-6, 15, 5}, {10, -3, 8}};
-        landmarks.assign(fixed_landmarks.begin(), fixed_landmarks.begin() + min(num_landmarks, fixed_landmarks.size()));
+        landmarks.assign(fixed_landmarks.begin(), fixed_landmarks.begin() + min(num_landmarks, static_cast<int>(fixed_landmarks.size())));
     }
 
     // These are poses in W frame use this to transform from W -> C
@@ -338,10 +344,7 @@ int optimizeGraph(int num_pose = 500, int num_landmarks = 1, double toaNoise = 0
     // initializing the tf with a possible initial value
     Twg->setEstimate(createRandomSE3Increment(2, 10) * gtPoseWG);
     if (addToAFactors)
-    {
         optimizer.addVertex(Twg);
-    }
-
 
     for (int i = 0; i < num_pose; i++)
     {
@@ -370,14 +373,14 @@ int optimizeGraph(int num_pose = 500, int num_landmarks = 1, double toaNoise = 0
                 meas = vEstPose[i] * vEstPose[i - 1].inverse();
             }
 
-            g2o::VertexSE3Expmap *prevPose = dynamic_cast<g2o::VertexSE3Expmap *>(optimizer.vertex(i-1));
+            g2o::VertexSE3Expmap *prevPose = dynamic_cast<g2o::VertexSE3Expmap *>(optimizer.vertex(i - 1));
             v->setEstimate(meas * prevPose->estimate());
 
             g2o::EdgeSE3 *e = new g2o::EdgeSE3();
             e->setMeasurement(meas);
             // TODO: add a variable for the information matrix of the poses
             e->setInformation(.01 * Eigen::Matrix<double, 6, 6>::Identity());
-            e->setVertex(0, optimizer.vertex(i-1));
+            e->setVertex(0, optimizer.vertex(i - 1));
             e->setVertex(1, v);
             optimizer.addEdge(e);
         }
@@ -387,7 +390,7 @@ int optimizeGraph(int num_pose = 500, int num_landmarks = 1, double toaNoise = 0
         {
             for (const auto &l : landmarks)
             {
-                auto meas = genToANoise(toaNoise) + (gtPoseWG.map(l) - currPose.inverse().translation()).norm();
+                auto meas = genToANoise(toaNoise) + currPose.map(l).norm();
                 ToaEdgeTr *e = new ToaEdgeTr();
                 e->setVertex(0, v);
                 e->setVertex(1, Twg);
@@ -418,7 +421,7 @@ int optimizeGraph(int num_pose = 500, int num_landmarks = 1, double toaNoise = 0
         cout << i << " - Ground Truth pose " << vGtPose[i].toMinimalVector().transpose() << endl;
         cout << i << " - Estimated pose " << v->estimate().toMinimalVector().transpose() << endl;
         cout << endl;
-        errors.push_back((v->estimate() * vGtPose[i].inverse()).log());
+        errors.push_back((gtPoseWG.inverse() * v->estimate() * vGtPose[i].inverse()).log());
     }
 
     cout << "RMSE Poses: " << computeRMSE(errors) << endl;
@@ -443,6 +446,7 @@ int optimizeGraph(int num_pose = 500, int num_landmarks = 1, double toaNoise = 0
 
 int main(int argc, char *argv[])
 {
-    optimizeGraph();
-    return 0;
+    // TODO: run optimize graph with different configuration, then save configuration and rmse result in a CSV file (with header possibly) that can be ported to a table or a plot in a easy way
+    // create another function that maybe loads the runs config from a file or it's handwritten inside at the beginning and run the function in a for loop
+    return optimizeGraph();
 }
