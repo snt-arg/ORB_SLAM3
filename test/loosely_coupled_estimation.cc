@@ -82,8 +82,7 @@ private:
 };
 
 // NEW
-int LoadPoses(const string strToaPath, vector<double> &TimeStamps,
-              vector<g2o::SE3Quat> &poses, bool bEurocStyle = true)
+int LoadPoses(const string strToaPath, vector<g2o::SE3Quat> &gtPoses, vector<g2o::SE3Quat> &estPoses, const g2o::SE3Quat &calibTbv)
 {
     // Load the ground truth with the format of time_stamp, x, y, z, qw, qx, qy, qz (euroc style)
     ifstream file;
@@ -97,11 +96,6 @@ int LoadPoses(const string strToaPath, vector<double> &TimeStamps,
 
     // Read each line of the CSV file
     std::string line;
-    if (bEurocStyle)
-    {
-        // throwing away the first line
-        getline(file, line);
-    }
 
     while (std::getline(file, line))
     {
@@ -109,33 +103,49 @@ int LoadPoses(const string strToaPath, vector<double> &TimeStamps,
         std::vector<double> values;
         std::stringstream ss(line);
         double value;
-        g2o::SE3Quat p;
 
         while (ss >> value)
         {
             values.push_back(value);
-            if (bEurocStyle)
-            {
-                // Ignore the comma separator for Euroc style
-                ss.ignore();
-            }
         }
 
-        // Add the values vector to the data vector
-        if (!bEurocStyle)
-        {
-            // TUM style, the qw comes at last
-            std::swap(values[4], values[7]);
-        }
+        g2o::SE3Quat p;
         p = g2o::SE3Quat(Eigen::Quaterniond(values[4], values[5], values[6], values[7]), Eigen::Vector3d(values[1], values[2], values[3]));
-        TimeStamps.push_back(values[0]);
-        values.erase(values.begin());
-        poses.push_back(p);
+        // if gtpose p is Tgv
+        // p = (p * calibTbv.inverse()).inverse();
+        p = p.inverse();
+        gtPoses.push_back(p);
+
+        int offset = 2 + 7 + 0; // 2 timestamps + first_pose + additional fields of gt
+
+        std::swap(values[offset+3], values[offset+6]);
+        p = g2o::SE3Quat(Eigen::Quaterniond(values[offset+3], values[offset+4], values[offset+5], values[offset+6]), Eigen::Vector3d(values[offset], values[offset+1], values[offset+2]));
+        // if p is Twb lets push Tbw
+        p = p.inverse();
+        estPoses.push_back(p);
     }
 
     // Close the file
     file.close();
     cout << "The" << strToaPath << "is loaded successfully!" << endl;
+    return 0;
+}
+
+int LoadTransformedPoses(string path_to_gt, vector<g2o::SE3Quat> &vGtPose, vector<g2o::SE3Quat> &vEstPose, g2o::SE3Quat &Twg)
+{
+    Eigen::Matrix4d Tbv_matrix;
+    Tbv_matrix << 0.33638, -0.01749, 0.94156, 0.06901,
+        -0.02078, -0.99972, -0.01114, -0.02781,
+        0.94150, -0.01582, -0.33665, -0.12395,
+        0.0, 0.0, 0.0, 1.0;
+    g2o::SE3Quat Tbv(Eigen::Matrix3d(Tbv_matrix.block<3, 3>(0, 0)), Eigen::Vector3d(Tbv_matrix.block<3, 1>(0, 3)));
+    // loading the ORBSLAM pose estimates
+    int err = LoadPoses(path_to_gt, vGtPose, vEstPose, Tbv);
+    if (err)
+        return 1;
+    // Obtain the Transformation Twg from the Ground truth to Odom World centres
+    //  Twg = Twb*Tbg
+    Twg = vEstPose[0].inverse() * vGtPose[0];
     return 0;
 }
 
@@ -194,64 +204,23 @@ double genToANoise(double stddev)
     return x;
 }
 
-double computeRMSE(const std::vector<g2o::Vector6d> &errors)
+double computeAPERMSE(const std::vector<Eigen::Matrix<double, 4, 4>> &errors)
 {
     int num_errors = errors.size();
-    g2o::Vector6d squared_errors_sum = g2o::Vector6d::Zero();
+    double squared_errors_sum = 0;
+    Eigen::Matrix<double, 4, 4> identity;
+    identity.setIdentity();
 
     for (int i = 0; i < num_errors; ++i)
     {
-        squared_errors_sum += errors[i].matrix().array().square().matrix();
+        squared_errors_sum += pow((errors[i] - identity).norm(), 2);
     }
 
-    double squared_errors_sum_avg = squared_errors_sum.sum() / (num_errors * 6);
-    double rmse = std::sqrt(squared_errors_sum_avg);
-
+    double rmse = std::sqrt(squared_errors_sum / num_errors);
     return rmse;
 }
 
-int LoadTransformedPoses(string path_to_gt, string path_to_est, vector<g2o::SE3Quat> &vGtPose, vector<g2o::SE3Quat> &vEstPose, g2o::SE3Quat &Twg)
-{
-    Eigen::Matrix4d Tbv_matrix;
-    Tbv_matrix << 0.33638, -0.01749, 0.94156, 0.06901,
-        -0.02078, -0.99972, -0.01114, -0.02781,
-        0.94150, -0.01582, -0.33665, -0.12395,
-        0.0, 0.0, 0.0, 1.0;
-    g2o::SE3Quat Tbv(Eigen::Matrix3d(Tbv_matrix.block<3, 3>(0, 0)), Eigen::Vector3d(Tbv_matrix.block<3, 1>(0, 3)));
-    // loading the ORBSLAM pose estimates
-    vector<double> estPosesTimeStamps;
-    // TODO: check 100 times that vEstPose are TBW and not viceversa
-    int err = LoadPoses(path_to_est, estPosesTimeStamps, vEstPose, false);
-    if (err)
-        return 1;
-    // loading ground truth poses of euroc mav, Gtgv is vicon in the ground
-    // gtPose_raw are vicon in the ground and estPoses are body in the world
-    vector<g2o::SE3Quat> gtPose_raw; // gtPose_raw are vicon in the ground
-    vector<double> gtPosesTimeStamps;
-    // TODO: check 100 times that gtPose_raw are TGV and not viceversa
-    err = LoadPoses(path_to_gt, gtPosesTimeStamps, gtPose_raw, true);
-    if (err)
-        return 1;
-
-    int gtPosesInd = 0;
-    for (int i = 0; i < vEstPose.size(); i++)
-    {
-
-        while (gtPosesTimeStamps[gtPosesInd] < estPosesTimeStamps[i] & gtPosesInd < gtPosesTimeStamps.size() - 1)
-        {
-            gtPosesInd++;
-        }
-        // replacing the ground truth poses with  Tbg, ground in body
-        vGtPose.push_back((gtPose_raw[gtPosesInd] * Tbv.inverse()).inverse());
-        vEstPose[i] = vEstPose[i].inverse();
-    }
-    // Obtain the Transformation Twg from the Ground truth to Odom World centres
-    //  Twg = Twb*Tbg
-    Twg = vEstPose[0].inverse() * vGtPose[0];
-    return 0;
-}
-
-int optimizeGraph(int num_pose = 500, int num_landmarks = 1, double toaNoise = 0.1, bool fixed_landmarks = true, bool addToAFactors = false, bool generate_rnd_poses = false)
+int optimizeGraph(int num_pose = 500, int num_landmarks = 1, double toaNoise = 0.1, bool fixed_landmarks = true, bool addToAFactors = true, bool generate_rnd_poses = false)
 {
 
     vector<g2o::SE3Quat> vGtPose;
@@ -261,10 +230,8 @@ int optimizeGraph(int num_pose = 500, int num_landmarks = 1, double toaNoise = 0
     if (!generate_rnd_poses)
     {
         // TODO: load file in a more general way (no hardcoded path). it does not work for me because the working dir is inside the test folder. Also, Datasets folder does not exits in the code.
-        string gtPath = "../data.csv";
-        // NOTE: load estimates from every frame not only key-frames
-        string estPath = "../f_V101_inertial.txt";
-        int err = LoadTransformedPoses(gtPath, estPath, vGtPose, vEstPose, gtPoseWG);
+        string assocPosesFile = "../associated_poses.txt";
+        int err = LoadTransformedPoses(assocPosesFile, vGtPose, vEstPose, gtPoseWG);
         if (err)
             return 1;
 
@@ -274,21 +241,25 @@ int optimizeGraph(int num_pose = 500, int num_landmarks = 1, double toaNoise = 0
         cout << "size of the estimated poses: " << vEstPose.size() << endl;
         // NEW: change the value of num_pose
         num_pose = vEstPose.size();
-        // check if the transformation is correct or not but printing the error between the estimation and the ground truth
-        for (int i = 0; i < num_pose; i++)
+        // check if the transformation is correct or not but printing the error between the estimation and the ground truth vector<g2o::Vector6d> errors;
+        vector<Eigen::Matrix<double, 4, 4>> errors;
+        errors.reserve(num_pose);
+        for (int i = 0; i < 100; i++)
         {
             // vEstPose[i]*vGtPose[i] does not result in zero error, but the other way around does!!!!???
             //  CLAUDIO: vEstPose[i]*vGtPose[i] should not be identity. The error of the estimation should be vEstPose[i]*gtPoseWG*vGtPose[i].inverse(), which is identity only in case of perfect odometry
             cout << "The error between estimation and ground truth is: " << endl
-                 << (vEstPose[i]* gtPoseWG * vGtPose[i].inverse()).toVector().transpose() << endl;
+                 << (vEstPose[i] * gtPoseWG * vGtPose[i].inverse()).toMinimalVector().transpose() << endl;
+            errors.push_back((vEstPose[i] * gtPoseWG * vGtPose[i].inverse()).to_homogeneous_matrix());
         }
+        cout << "Baseline RMSE: " << computeAPERMSE(errors) << endl;
     }
     else
     {
         gtPoseWG = createRandomSE3Increment(3, 30);
     }
     cout << "Ground truth TWG (from G to W) " << gtPoseWG.toMinimalVector().transpose() << endl;
-
+    return 1;
     vector<Eigen::Vector3d> landmarks;
     landmarks.reserve(num_landmarks);
     // random initialization of the landmarks:
@@ -415,7 +386,7 @@ int optimizeGraph(int num_pose = 500, int num_landmarks = 1, double toaNoise = 0
     optimizer.optimize(100);
     optimizer.computeActiveErrors();
 
-    vector<g2o::Vector6d> errors;
+    vector<Eigen::Matrix<double, 4, 4>> errors;
     errors.reserve(vGtPose.size());
 
     for (int i; i < vGtPose.size(); i++)
@@ -424,11 +395,11 @@ int optimizeGraph(int num_pose = 500, int num_landmarks = 1, double toaNoise = 0
 
         cout << i << " - Ground Truth pose " << (gtPoseWG * vGtPose[i].inverse()).toMinimalVector().transpose() << endl;
         cout << i << " - Estimated pose " << v->estimate().toMinimalVector().transpose() << endl;
-        cout << endl;        // errors.push_back((gtPoseWG.inverse() * v->estimate() * vGtPose[i].inverse()).log());
-        errors.push_back((v->estimate() * gtPoseWG * vGtPose[i].inverse()).log());
+        cout << endl;
+        errors.push_back((v->estimate() * gtPoseWG * vGtPose[i].inverse()).to_homogeneous_matrix());
     }
 
-    cout << "RMSE Poses: " << computeRMSE(errors) << endl;
+    cout << "RMSE Poses: " << computeAPERMSE(errors) << endl;
     cout << endl;
 
     // Printing the Transformation and it estimation
@@ -437,7 +408,7 @@ int optimizeGraph(int num_pose = 500, int num_landmarks = 1, double toaNoise = 0
         g2o::VertexSE3Expmap *v = dynamic_cast<g2o::VertexSE3Expmap *>(optimizer.vertex(-1));
         cout << "Ground truth TWG: " << gtPoseWG.toMinimalVector().transpose() << endl;
         cout << "Estimated TWG: " << v->estimate().toMinimalVector().transpose() << endl;
-        cout << "RMSE TWG: " << computeRMSE({(v->estimate() * gtPoseWG.inverse()).log()}) << endl;
+        cout << "RMSE TWG: " << computeAPERMSE({(v->estimate() * gtPoseWG.inverse()).to_homogeneous_matrix()}) << endl;
         cout << endl;
     }
     else

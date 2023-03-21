@@ -129,7 +129,7 @@ double genToANoise(double stddev)
     return x;
 }
 
-double computeRMSE(const std::vector<g2o::Vector6d> &errors)
+double computeAPERMSE(const std::vector<g2o::Vector6d> &errors)
 {
     int num_errors = errors.size();
     g2o::Vector6d squared_errors_sum = g2o::Vector6d::Zero();
@@ -284,7 +284,7 @@ int optimizeGraph(int num_pose = 100, int num_landmarks = 1, double toaNoise = 0
         errors.push_back((v->estimate() * vPose[i].inverse()).log());
     }
 
-    cout << "RMSE Poses: " << computeRMSE(errors) << endl;
+    cout << "RMSE Poses: " << computeAPERMSE(errors) << endl;
     cout << endl;
 
     // Printing the Transformation and it estimation
@@ -293,7 +293,7 @@ int optimizeGraph(int num_pose = 100, int num_landmarks = 1, double toaNoise = 0
         g2o::VertexSE3Expmap *v = dynamic_cast<g2o::VertexSE3Expmap *>(optimizer.vertex(-1));
         cout << "Ground truth TWG: " << gtPoseWG.toMinimalVector().transpose() << endl;
         cout << "Estimated TWG: " << v->estimate().toMinimalVector().transpose() << endl;
-        cout << "RMSE TWG: " << computeRMSE({(v->estimate() * gtPoseWG.inverse()).log()}) << endl;
+        cout << "RMSE TWG: " << computeAPERMSE({(v->estimate() * gtPoseWG.inverse()).log()}) << endl;
         cout << endl;
     }
     else
