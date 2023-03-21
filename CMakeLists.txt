@@ -7,8 +7,8 @@ ENDIF()
 
 MESSAGE("Build type: " ${CMAKE_BUILD_TYPE})
 
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS}  -w   -O2")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w  -O2")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS}  -w   -O0")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w  -O0")
 set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -march=native -O3")
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -march=native -O3")
 
@@ -412,6 +412,3 @@ target_link_libraries(toa_test ${PROJECT_NAME})
 add_executable(loosely_coupled_estimation
         test/loosely_coupled_estimation.cc)
 target_link_libraries(loosely_coupled_estimation ${PROJECT_NAME})
-
-
-

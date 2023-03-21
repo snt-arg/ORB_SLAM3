@@ -111,7 +111,7 @@ int LoadPoses(const string strToaPath, vector<g2o::SE3Quat> &gtPoses, vector<g2o
 
         g2o::SE3Quat p;
         p = g2o::SE3Quat(Eigen::Quaterniond(values[7], values[5], values[6], values[4]), Eigen::Vector3d(values[1], values[2], values[3]));
-        gtPoses.push_back(p); // Tgb
+        gtPoses.push_back(p); // Tgv
 
         int offset = 2 + 7 + 0; // 2 timestamps + first_pose + additional fields of gt
 
@@ -121,7 +121,7 @@ int LoadPoses(const string strToaPath, vector<g2o::SE3Quat> &gtPoses, vector<g2o
 
     // Close the file
     file.close();
-    cout << "The" << strToaPath << "is loaded successfully!" << endl;
+    cout << "Successfully loaded the" << strToaPath << " file!" << endl;
     return 0;
 }
 
@@ -139,7 +139,7 @@ int LoadTransformedPoses(string path_to_gt, vector<g2o::SE3Quat> &vGtPose, vecto
         return 1;
     // Obtain the Transformation Twg from the Ground truth to Odom World centres
     //  Twg = Twb*Tbg
-    Twg = vEstPose[0]* vGtPose[0].inverse();
+    Twg = vEstPose[0] * Tbv * vGtPose[0].inverse();
 
     Eigen::Matrix4d align_matrix;
     align_matrix << 0.36852209,  0.24800063,  0.8959281,   0.83038384,
@@ -237,7 +237,7 @@ double computeATERMSE(const std::vector<Eigen::Vector3d> &errors)
     return rmse;
 }
 
-int optimizeGraph(int num_pose = 500, int num_landmarks = 3, double toaNoise = 0.1, bool fixed_landmarks = true, bool addToAFactors = true, bool generate_rnd_poses = false)
+int optimizeGraph(int num_pose = 500, int num_landmarks = 1, double toaNoise = 0.1, bool fixed_landmarks = true, bool addToAFactors = true, bool generate_rnd_poses = false)
 {
 
     vector<g2o::SE3Quat> vGtPose;
@@ -279,7 +279,7 @@ int optimizeGraph(int num_pose = 500, int num_landmarks = 3, double toaNoise = 0
     {
         gtPoseWG = createRandomSE3Increment(3, 30);
     }
-    cout << "Ground truth TWG (from G to W) " << gtPoseWG.toMinimalVector().transpose() << endl;
+    cout << "Ground truth Twg: " << gtPoseWG.toMinimalVector().transpose() << endl;
 
     vector<Eigen::Vector3d> landmarks;
     landmarks.reserve(num_landmarks);
@@ -298,15 +298,16 @@ int optimizeGraph(int num_pose = 500, int num_landmarks = 3, double toaNoise = 0
     {
         // manual initialization of the landmarks
         // TODO set landmarks to where you would actually place them inside the dataset (i.e., wrt vicon coord frame)
-        std::vector<Eigen::Vector3d> fixed_landmarks = {{5, 6, 3}, {-6, 15, 5}, {10, -3, 8}};
+        std::vector<Eigen::Vector3d> fixed_landmarks = {{0, 0, 0}, {-6, 15, 5}, {10, -3, 8}};
         landmarks.assign(fixed_landmarks.begin(), fixed_landmarks.begin() + min(num_landmarks, static_cast<int>(fixed_landmarks.size())));
     }
 
     // These are poses in W frame use this to transform from W -> C
+    // Create g2o::SE3Quat object with identity rotation and zero translation
     g2o::SE3Quat origin_pose;
     if (generate_rnd_poses)
     {
-        // Create g2o::SE3Quat object with identity rotation and zero translation
+
         vGtPose.push_back(origin_pose);
         for (int i = 1; i < num_pose; i++)
         {
@@ -318,9 +319,10 @@ int optimizeGraph(int num_pose = 500, int num_landmarks = 3, double toaNoise = 0
             vGtPose.push_back(p);
         }
     }
-    // NEW
-    cout << "print the size of vGtPose:" << vGtPose.size() << endl;
-    cout << "pose_num:" << num_pose << endl;
+    else
+        origin_pose = vEstPose[0];
+
+    cout << "Num of poses to estimate:" << num_pose << endl;
 
     // Setup optimizer
     g2o::SparseOptimizer optimizer;
@@ -335,7 +337,8 @@ int optimizeGraph(int num_pose = 500, int num_landmarks = 3, double toaNoise = 0
     g2o::VertexSE3Expmap *Twg = new g2o::VertexSE3Expmap();
     Twg->setId(-1);
     // initializing the tf with a possible initial value
-    Twg->setEstimate(createRandomSE3Increment(0, 0) * gtPoseWG);
+    Twg->setEstimate(createRandomSE3Increment(0,0) * gtPoseWG);
+    // Twg->setEstimate(origin_pose);
     if (addToAFactors)
         optimizer.addVertex(Twg);
 
@@ -367,6 +370,7 @@ int optimizeGraph(int num_pose = 500, int num_landmarks = 3, double toaNoise = 0
 
             g2o::VertexSE3Expmap *prevPose = dynamic_cast<g2o::VertexSE3Expmap *>(optimizer.vertex(i - 1));
             v->setEstimate(meas * prevPose->estimate());
+            // v->setFixed(true);
 
             g2o::EdgeSE3 *e = new g2o::EdgeSE3();
             e->setMeasurement(meas);
@@ -401,6 +405,7 @@ int optimizeGraph(int num_pose = 500, int num_landmarks = 3, double toaNoise = 0
     // Optimize the graph
     cout << "Number of vertices: " << optimizer.vertices().size() << endl;
     cout << "Number of edges: " << optimizer.edges().size() << endl;
+    cout << endl;
     optimizer.initializeOptimization();
     optimizer.computeActiveErrors();
     optimizer.optimize(100);
@@ -414,10 +419,6 @@ int optimizeGraph(int num_pose = 500, int num_landmarks = 3, double toaNoise = 0
     for (int i; i < vGtPose.size(); i++)
     {
         g2o::VertexSE3Expmap *v = dynamic_cast<g2o::VertexSE3Expmap *>(optimizer.vertex(i));
-
-        // cout << i << " - Ground Truth pose " << (gtPoseWG * vGtPose[i]).toMinimalVector().transpose() << endl;
-        // cout << i << " - Estimated pose " << v->estimate().toMinimalVector().transpose() << endl;
-        // cout << endl;
         errors.push_back((v->estimate().inverse() * gtPoseWG * vGtPose[i]).to_homogeneous_matrix());
         errors_t.push_back((v->estimate().inverse() * gtPoseWG * vGtPose[i]).translation());
     }
@@ -426,14 +427,13 @@ int optimizeGraph(int num_pose = 500, int num_landmarks = 3, double toaNoise = 0
     cout << "RMSE ATE Poses: " << computeATERMSE(errors_t) << endl;
     cout << endl;
 
-    // Printing the Transformation and it estimation
     if (addToAFactors)
     {
         g2o::VertexSE3Expmap *v = dynamic_cast<g2o::VertexSE3Expmap *>(optimizer.vertex(-1));
         cout << "Ground truth TWG: " << gtPoseWG.toMinimalVector().transpose() << endl;
         cout << "Estimated TWG: " << v->estimate().toMinimalVector().transpose() << endl;
-        cout << "RMSE TWG: " << computeAPERMSE({(v->estimate() * gtPoseWG.inverse()).to_homogeneous_matrix()}) << endl;
-        cout << "RMSE TWG: " << computeATERMSE({(v->estimate() * gtPoseWG.inverse()).translation()}) << endl;
+        cout << "RMSE APE Twg: " << computeAPERMSE({(v->estimate() * gtPoseWG.inverse()).to_homogeneous_matrix()}) << endl;
+        cout << "RMSE ATE Twg: " << computeATERMSE({(v->estimate() * gtPoseWG.inverse()).translation()}) << endl;
         cout << endl;
     }
     else
