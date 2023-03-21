@@ -163,6 +163,21 @@ if __name__ == '__main__':
         for a, b in matches:
             print("%f %s" % (a, " ".join(first_list[a])))
     else:
+        lines = [[], [], []]
         for a, b in matches:
+
+            first_list[a][3], first_list[a][-1] = first_list[a][-1], first_list[a][3]
+
             print("%f %s %f %s" % (a, " ".join(
                 first_list[a]), b-float(args.offset), " ".join(second_list[b])))
+
+            lines[0].append(f"{a} {' '.join(first_list[a])} {b-float(args.offset)} {' '.join(second_list[b])}\n")
+            lines[1].append(f"{a} {' '.join(first_list[a])}\n")
+            lines[2].append(f"{b} {' '.join(second_list[b])}\n")
+
+        with open('associated_poses.txt', 'w') as f:
+            f.writelines(lines[0])
+        with open('gt_poses.txt', 'w') as f:
+            f.writelines(lines[1])
+        with open('est_poses.txt', 'w') as f:
+            f.writelines(lines[2])
