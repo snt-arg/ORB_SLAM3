@@ -37,7 +37,38 @@ public:
         const g2o::VertexSE3Expmap *v0 = static_cast<const g2o::VertexSE3Expmap *>(_vertices[0]);
         const g2o::VertexSE3Expmap *v1 = static_cast<const g2o::VertexSE3Expmap *>(_vertices[1]);
         Eigen::Vector3d landmark_tr = v1->estimate().map(_landmark);
-        auto est_distance = (landmark_tr - v0->estimate().translation()).norm();
+        auto est_distance = (landmark_tr - v0->estimate().inverse().translation()).norm();
+        _error[0] = est_distance - _measurement;
+    }
+
+    bool read(istream &is) override { return true; }
+    bool write(ostream &os) const override { return true; }
+
+    void setLandmark(const Eigen::Vector3d &landmark)
+    {
+        _landmark = landmark;
+    }
+    const Eigen::Vector3d &getLandmark() const
+    {
+        return _landmark;
+    }
+    void setMeasurement(double measurement) { _measurement = measurement; }
+
+private:
+    double _measurement;
+    Eigen::Vector3d _landmark;
+};
+
+class ToaEdge : public g2o::BaseUnaryEdge<1, double, g2o::VertexSE3Expmap>
+{
+
+public:
+    ToaEdge() {}
+    void computeError() override
+    {
+        // Assumptions: gt: Tbg, nodes: Tbw, landmark: Twl = Twg * Tgl
+        const g2o::VertexSE3Expmap *v0 = static_cast<const g2o::VertexSE3Expmap *>(_vertices[0]);
+        auto est_distance = (v0->estimate().inverse().translation() - _landmark).norm();
         _error[0] = est_distance - _measurement;
     }
 
@@ -81,6 +112,27 @@ private:
     g2o::SE3Quat _measurement;
 };
 
+void addToaEdge(g2o::SparseOptimizer &optimizer, const Eigen::Vector3d &landmark, double measurement, g2o::VertexSE3Expmap *v, g2o::SE3Quat Twg, double cov)
+{
+    ToaEdge *e = new ToaEdge();
+    e->setVertex(0, v);
+    e->setMeasurement(measurement);
+    e->setLandmark(Twg.map(landmark));
+    e->setInformation(cov * Eigen::Matrix<double, 1, 1>::Identity());
+    optimizer.addEdge(e);
+}
+
+void addToaEdgeTr(g2o::SparseOptimizer &optimizer, const Eigen::Vector3d &landmark, const double &measurement, g2o::VertexSE3Expmap *v0, g2o::VertexSE3Expmap *v1, double cov)
+{
+    ToaEdgeTr *e = new ToaEdgeTr();
+    e->setVertex(0, v0);
+    e->setVertex(1, v1);
+    e->setMeasurement(measurement);
+    e->setLandmark(landmark);
+    e->setInformation(cov * Eigen::Matrix<double, 1, 1>::Identity());
+    optimizer.addEdge(e);
+}
+
 // NEW
 int LoadPoses(const string strToaPath, vector<g2o::SE3Quat> &gtPoses, vector<g2o::SE3Quat> &estPoses, const g2o::SE3Quat &calibTbv)
 {
@@ -115,7 +167,7 @@ int LoadPoses(const string strToaPath, vector<g2o::SE3Quat> &gtPoses, vector<g2o
 
         int offset = 2 + 7 + 0; // 2 timestamps + first_pose + additional fields of gt
 
-        p = g2o::SE3Quat(Eigen::Quaterniond(values[offset+6], values[offset+4], values[offset+5], values[offset+3]), Eigen::Vector3d(values[offset], values[offset+1], values[offset+2]));
+        p = g2o::SE3Quat(Eigen::Quaterniond(values[offset + 6], values[offset + 4], values[offset + 5], values[offset + 3]), Eigen::Vector3d(values[offset], values[offset + 1], values[offset + 2]));
         estPoses.push_back(p); // Twb
     }
 
@@ -133,6 +185,9 @@ int LoadTransformedPoses(string path_to_gt, vector<g2o::SE3Quat> &vGtPose, vecto
         0.94150, -0.01582, -0.33665, -0.12395,
         0.0, 0.0, 0.0, 1.0;
     g2o::SE3Quat Tbv(Eigen::Matrix3d(Tbv_matrix.block<3, 3>(0, 0)), Eigen::Vector3d(Tbv_matrix.block<3, 1>(0, 3)));
+
+    // Chanign the tbv to identity as the ground truth is already in the body frame
+    Tbv = g2o::SE3Quat(Eigen::Matrix3d::Identity(), Eigen::Vector3d::Zero());
     // loading the ORBSLAM pose estimates
     int err = LoadPoses(path_to_gt, vGtPose, vEstPose, Tbv);
     if (err)
@@ -142,12 +197,12 @@ int LoadTransformedPoses(string path_to_gt, vector<g2o::SE3Quat> &vGtPose, vecto
     Twg = vEstPose[0] * Tbv * vGtPose[0].inverse();
 
     Eigen::Matrix4d align_matrix;
-    align_matrix << 0.36852209,  0.24800063,  0.8959281,   0.83038384,
-                    0.09182906, -0.9687563,   0.23038806,  2.19203329,
-                    0.92507237, -0.00263085, -0.37978177,  1.05654092,
-                    0.,          0.,          0.,          1.;
+    align_matrix << 0.36852209, 0.24800063, 0.8959281, 0.83038384,
+        0.09182906, -0.9687563, 0.23038806, 2.19203329,
+        0.92507237, -0.00263085, -0.37978177, 1.05654092,
+        0., 0., 0., 1.;
     g2o::SE3Quat align(Eigen::Matrix3d(align_matrix.block<3, 3>(0, 0)), Eigen::Vector3d(align_matrix.block<3, 1>(0, 3)));
-    Twg = align.inverse();
+    // Twg = align.inverse();
     return 0;
 }
 
@@ -210,7 +265,8 @@ double computeAPERMSE(const std::vector<Eigen::Matrix<double, 4, 4>> &errors)
 {
     int num_errors = errors.size();
     double squared_errors_sum = 0;
-    Eigen::Matrix<double, 4, 4> identity;
+    // Eigen::Matrix<double, 4, 4> identity;
+    Eigen::Matrix4d identity;
     identity.setIdentity();
 
     for (int i = 0; i < num_errors; ++i)
@@ -237,7 +293,7 @@ double computeATERMSE(const std::vector<Eigen::Vector3d> &errors)
     return rmse;
 }
 
-int optimizeGraph(int num_pose = 500, int num_landmarks = 1, double toaNoise = 0.1, bool fixed_landmarks = true, bool addToAFactors = true, bool generate_rnd_poses = false)
+int optimizeGraph(int num_pose = 500, int num_landmarks = 6, double toaNoise = 0.1, bool fixed_landmarks = false, bool addToAFactors = true, bool generate_rnd_poses = false, bool transformation = true)
 {
 
     vector<g2o::SE3Quat> vGtPose;
@@ -301,6 +357,7 @@ int optimizeGraph(int num_pose = 500, int num_landmarks = 1, double toaNoise = 0
         std::vector<Eigen::Vector3d> fixed_landmarks = {{0, 0, 0}, {-6, 15, 5}, {10, -3, 8}};
         landmarks.assign(fixed_landmarks.begin(), fixed_landmarks.begin() + min(num_landmarks, static_cast<int>(fixed_landmarks.size())));
     }
+    cout << "landmarks size: " << landmarks.size() << endl;
 
     // These are poses in W frame use this to transform from W -> C
     // Create g2o::SE3Quat object with identity rotation and zero translation
@@ -337,7 +394,7 @@ int optimizeGraph(int num_pose = 500, int num_landmarks = 1, double toaNoise = 0
     g2o::VertexSE3Expmap *Twg = new g2o::VertexSE3Expmap();
     Twg->setId(-1);
     // initializing the tf with a possible initial value
-    Twg->setEstimate(createRandomSE3Increment(0,0) * gtPoseWG);
+    Twg->setEstimate(createRandomSE3Increment(0, 0) * gtPoseWG);
     // Twg->setEstimate(origin_pose);
     if (addToAFactors)
         optimizer.addVertex(Twg);
@@ -369,7 +426,8 @@ int optimizeGraph(int num_pose = 500, int num_landmarks = 1, double toaNoise = 0
             }
 
             g2o::VertexSE3Expmap *prevPose = dynamic_cast<g2o::VertexSE3Expmap *>(optimizer.vertex(i - 1));
-            v->setEstimate(meas * prevPose->estimate());
+            // v->setEstimate(meas * prevPose->estimate());
+            // v->setEstimate(currPose);
             // v->setFixed(true);
 
             g2o::EdgeSE3 *e = new g2o::EdgeSE3();
@@ -378,7 +436,7 @@ int optimizeGraph(int num_pose = 500, int num_landmarks = 1, double toaNoise = 0
             e->setInformation(.001 * Eigen::Matrix<double, 6, 6>::Identity());
             e->setVertex(0, optimizer.vertex(i - 1));
             e->setVertex(1, v);
-            optimizer.addEdge(e);
+            // optimizer.addEdge(e);
         }
         optimizer.addVertex(v);
 
@@ -390,14 +448,11 @@ int optimizeGraph(int num_pose = 500, int num_landmarks = 1, double toaNoise = 0
                 // currposes is Tbg, and l is Tgl, so we just convert tgb->Tgb and subtract them and take norm as both of them are in the same frame (G)
                 // However, in ToAEdgeTr, as the node is Twb, we need transformation, to transform the landmark to the world.
                 auto meas = genToANoise(toaNoise) + (l - currPose.translation()).norm();
-                ToaEdgeTr *e = new ToaEdgeTr();
-                e->setVertex(0, v);
-                e->setVertex(1, Twg);
-                e->setMeasurement(meas);
-                e->setLandmark(l);
-                // TODO: add a variable for the information matrix of the poses
-                e->setInformation(.01 * Eigen::Matrix<double, 1, 1>::Identity());
-                optimizer.addEdge(e);
+                if (transformation)
+                    addToaEdgeTr(optimizer, l, meas, v, Twg, 0.001);
+                else
+                    // Add EdgeToa without transformation
+                    addToaEdge(optimizer, l, meas, v, gtPoseWG, 0.001);
             }
         }
     }
@@ -408,7 +463,7 @@ int optimizeGraph(int num_pose = 500, int num_landmarks = 1, double toaNoise = 0
     cout << endl;
     optimizer.initializeOptimization();
     optimizer.computeActiveErrors();
-    optimizer.optimize(100);
+    optimizer.optimize(30);
     optimizer.computeActiveErrors();
 
     vector<Eigen::Matrix<double, 4, 4>> errors;
@@ -416,14 +471,16 @@ int optimizeGraph(int num_pose = 500, int num_landmarks = 1, double toaNoise = 0
     vector<Eigen::Vector3d> errors_t;
     errors_t.reserve(vGtPose.size());
 
-    for (int i; i < vGtPose.size(); i++)
+    cout << "vGtPose.size() " << vGtPose.size() << endl;
+    for (int i = 0; i < vGtPose.size(); i++)
     {
         g2o::VertexSE3Expmap *v = dynamic_cast<g2o::VertexSE3Expmap *>(optimizer.vertex(i));
-        errors.push_back((v->estimate().inverse() * gtPoseWG * vGtPose[i]).to_homogeneous_matrix());
-        errors_t.push_back((v->estimate().inverse() * gtPoseWG * vGtPose[i]).translation());
+        errors.push_back((v->estimate() * gtPoseWG * vGtPose[i]).to_homogeneous_matrix());
+        errors_t.push_back((v->estimate() * gtPoseWG * vGtPose[i]).translation());
     }
 
     cout << "RMSE APE Poses: " << computeAPERMSE(errors) << endl;
+    cout << "--------------------------------------------" << endl;
     cout << "RMSE ATE Poses: " << computeATERMSE(errors_t) << endl;
     cout << endl;
 
