@@ -426,8 +426,7 @@ int optimizeGraph(int num_pose = 500, int num_landmarks = 6, double toaNoise = 0
             }
 
             g2o::VertexSE3Expmap *prevPose = dynamic_cast<g2o::VertexSE3Expmap *>(optimizer.vertex(i - 1));
-            // v->setEstimate(meas * prevPose->estimate());
-            // v->setEstimate(currPose);
+            v->setEstimate(meas * prevPose->estimate());
             // v->setFixed(true);
 
             g2o::EdgeSE3 *e = new g2o::EdgeSE3();
@@ -436,7 +435,7 @@ int optimizeGraph(int num_pose = 500, int num_landmarks = 6, double toaNoise = 0
             e->setInformation(.001 * Eigen::Matrix<double, 6, 6>::Identity());
             e->setVertex(0, optimizer.vertex(i - 1));
             e->setVertex(1, v);
-            // optimizer.addEdge(e);
+            optimizer.addEdge(e);
         }
         optimizer.addVertex(v);
 
