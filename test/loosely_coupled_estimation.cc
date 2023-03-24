@@ -24,11 +24,24 @@
 #include <algorithm>
 
 using namespace std;
-class ToaEdgeTr : public g2o::BaseBinaryEdge<1, double, g2o::VertexSE3Expmap, g2o::VertexSE3Expmap>
+
+static std::string toString(const Eigen::Matrix4d &mat)
+{
+    std::stringstream ss;
+    ss << mat;
+    return ss.str();
+}
+static std::string toString(const Eigen::Vector3d &mat)
+{
+    std::stringstream ss;
+    ss << mat;
+    return ss.str();
+}
+class ToaEdge : public g2o::BaseBinaryEdge<1, double, g2o::VertexSE3Expmap, g2o::VertexSE3Expmap>
 {
 
 public:
-    ToaEdgeTr() {}
+    ToaEdge() {}
     void computeError() override
     {
         // The first node is keyframe pose in camera frame, i.e., Tcw
@@ -36,39 +49,8 @@ public:
         //  Landmark is in the vicon frame, i.e., Tgl
         const g2o::VertexSE3Expmap *v0 = static_cast<const g2o::VertexSE3Expmap *>(_vertices[0]);
         const g2o::VertexSE3Expmap *v1 = static_cast<const g2o::VertexSE3Expmap *>(_vertices[1]);
-        Eigen::Vector3d landmark_tr = v1->estimate().map(_landmark);
-        auto est_distance = (landmark_tr - v0->estimate().inverse().translation()).norm();
-        _error[0] = est_distance - _measurement;
-    }
-
-    bool read(istream &is) override { return true; }
-    bool write(ostream &os) const override { return true; }
-
-    void setLandmark(const Eigen::Vector3d &landmark)
-    {
-        _landmark = landmark;
-    }
-    const Eigen::Vector3d &getLandmark() const
-    {
-        return _landmark;
-    }
-    void setMeasurement(double measurement) { _measurement = measurement; }
-
-private:
-    double _measurement;
-    Eigen::Vector3d _landmark;
-};
-
-class ToaEdge : public g2o::BaseUnaryEdge<1, double, g2o::VertexSE3Expmap>
-{
-
-public:
-    ToaEdge() {}
-    void computeError() override
-    {
-        // Assumptions: gt: Tbg, nodes: Tbw, landmark: Twl = Twg * Tgl
-        const g2o::VertexSE3Expmap *v0 = static_cast<const g2o::VertexSE3Expmap *>(_vertices[0]);
-        auto est_distance = (v0->estimate().inverse().translation() - _landmark).norm();
+        Eigen::Vector3d landmark_w = v1->estimate().map(_landmark);
+        auto est_distance = v0->estimate().map(landmark_w).norm();
         _error[0] = est_distance - _measurement;
     }
 
@@ -112,27 +94,6 @@ private:
     g2o::SE3Quat _measurement;
 };
 
-void addToaEdge(g2o::SparseOptimizer &optimizer, const Eigen::Vector3d &landmark, double measurement, g2o::VertexSE3Expmap *v, g2o::SE3Quat Twg, double cov)
-{
-    ToaEdge *e = new ToaEdge();
-    e->setVertex(0, v);
-    e->setMeasurement(measurement);
-    e->setLandmark(Twg.map(landmark));
-    e->setInformation(cov * Eigen::Matrix<double, 1, 1>::Identity());
-    optimizer.addEdge(e);
-}
-
-void addToaEdgeTr(g2o::SparseOptimizer &optimizer, const Eigen::Vector3d &landmark, const double &measurement, g2o::VertexSE3Expmap *v0, g2o::VertexSE3Expmap *v1, double cov)
-{
-    ToaEdgeTr *e = new ToaEdgeTr();
-    e->setVertex(0, v0);
-    e->setVertex(1, v1);
-    e->setMeasurement(measurement);
-    e->setLandmark(landmark);
-    e->setInformation(cov * Eigen::Matrix<double, 1, 1>::Identity());
-    optimizer.addEdge(e);
-}
-
 // NEW
 int LoadPoses(const string strToaPath, vector<g2o::SE3Quat> &gtPoses, vector<g2o::SE3Quat> &estPoses, const g2o::SE3Quat &calibTbv)
 {
@@ -162,13 +123,13 @@ int LoadPoses(const string strToaPath, vector<g2o::SE3Quat> &gtPoses, vector<g2o
         }
 
         g2o::SE3Quat p;
-        p = g2o::SE3Quat(Eigen::Quaterniond(values[7], values[5], values[6], values[4]), Eigen::Vector3d(values[1], values[2], values[3]));
-        gtPoses.push_back(p); // Tgv
+        p = g2o::SE3Quat(Eigen::Quaterniond(values[7], values[4], values[5], values[6]), Eigen::Vector3d(values[1], values[2], values[3]));
+        gtPoses.push_back(calibTbv.inverse() * p.inverse()); // Tbg
 
         int offset = 2 + 7 + 0; // 2 timestamps + first_pose + additional fields of gt
 
-        p = g2o::SE3Quat(Eigen::Quaterniond(values[offset + 6], values[offset + 4], values[offset + 5], values[offset + 3]), Eigen::Vector3d(values[offset], values[offset + 1], values[offset + 2]));
-        estPoses.push_back(p); // Twb
+        p = g2o::SE3Quat(Eigen::Quaterniond(values[offset + 6], values[offset + 3], values[offset + 4], values[offset + 5]), Eigen::Vector3d(values[offset], values[offset + 1], values[offset + 2]));
+        estPoses.push_back(p.inverse()); // Tbw
     }
 
     // Close the file
@@ -177,7 +138,7 @@ int LoadPoses(const string strToaPath, vector<g2o::SE3Quat> &gtPoses, vector<g2o
     return 0;
 }
 
-int LoadTransformedPoses(string path_to_gt, vector<g2o::SE3Quat> &vGtPose, vector<g2o::SE3Quat> &vEstPose, g2o::SE3Quat &Twg)
+int LoadTransformedPoses(string path_to_gt, vector<g2o::SE3Quat> &gtPoses, vector<g2o::SE3Quat> &estPoses, g2o::SE3Quat &Twg)
 {
     Eigen::Matrix4d Tbv_matrix;
     Tbv_matrix << 0.33638, -0.01749, 0.94156, 0.06901,
@@ -186,23 +147,22 @@ int LoadTransformedPoses(string path_to_gt, vector<g2o::SE3Quat> &vGtPose, vecto
         0.0, 0.0, 0.0, 1.0;
     g2o::SE3Quat Tbv(Eigen::Matrix3d(Tbv_matrix.block<3, 3>(0, 0)), Eigen::Vector3d(Tbv_matrix.block<3, 1>(0, 3)));
 
-    // Chanign the tbv to identity as the ground truth is already in the body frame
-    Tbv = g2o::SE3Quat(Eigen::Matrix3d::Identity(), Eigen::Vector3d::Zero());
+    // Changin the tbv to identity as the ground truth is already in the body frame
+    Tbv = g2o::SE3Quat(); // If Tvb already applied in the text file.
     // loading the ORBSLAM pose estimates
-    int err = LoadPoses(path_to_gt, vGtPose, vEstPose, Tbv);
+    int err = LoadPoses(path_to_gt, gtPoses, estPoses, Tbv);
     if (err)
         return 1;
+
+    auto origin = estPoses[0].inverse(); //starting from 0,0,0 not necessary but nice
+
+    for (auto &pose : estPoses)
+    {
+        pose = pose * origin;
+    }
     // Obtain the Transformation Twg from the Ground truth to Odom World centres
     //  Twg = Twb*Tbg
-    Twg = vEstPose[0] * Tbv * vGtPose[0].inverse();
-
-    Eigen::Matrix4d align_matrix;
-    align_matrix << 0.36852209, 0.24800063, 0.8959281, 0.83038384,
-        0.09182906, -0.9687563, 0.23038806, 2.19203329,
-        0.92507237, -0.00263085, -0.37978177, 1.05654092,
-        0., 0., 0., 1.;
-    g2o::SE3Quat align(Eigen::Matrix3d(align_matrix.block<3, 3>(0, 0)), Eigen::Vector3d(align_matrix.block<3, 1>(0, 3)));
-    // Twg = align.inverse();
+    Twg = estPoses[0].inverse() * gtPoses[0];
     return 0;
 }
 
@@ -293,27 +253,27 @@ double computeATERMSE(const std::vector<Eigen::Vector3d> &errors)
     return rmse;
 }
 
-int optimizeGraph(int num_pose = 500, int num_landmarks = 6, double toaNoise = 0.1, bool fixed_landmarks = false, bool addToAFactors = true, bool generate_rnd_poses = false, bool transformation = true)
+int optimizeGraph(int num_pose = 500, int num_landmarks = 1, double toaNoise = 0.3, bool fixed_landmarks = true, bool addToAFactors = true, bool generate_rnd_poses = false, bool estTwg = true)
 {
 
-    vector<g2o::SE3Quat> vGtPose;
-    vector<g2o::SE3Quat> vEstPose;
+    vector<g2o::SE3Quat> gtPoses;
+    vector<g2o::SE3Quat> estPoses;
     g2o::SE3Quat gtPoseWG;
 
     if (!generate_rnd_poses)
     {
         // TODO: load file in a more general way (no hardcoded path). it does not work for me because the working dir is inside the test folder. Also, Datasets folder does not exits in the code.
         string assocPosesFile = "../associated_poses.txt";
-        int err = LoadTransformedPoses(assocPosesFile, vGtPose, vEstPose, gtPoseWG);
+        int err = LoadTransformedPoses(assocPosesFile, gtPoses, estPoses, gtPoseWG);
         if (err)
             return 1;
 
-        cout << "print the first vector of gtPose_raw: " << vGtPose[0].toMinimalVector().transpose() << endl;
-        cout << "print the first vector of estPoses: " << vEstPose[0].toMinimalVector().transpose() << endl;
-        cout << "size of the ground truth poses: " << vGtPose.size() << endl;
-        cout << "size of the estimated poses: " << vEstPose.size() << endl;
+        cout << "print the first vector of gtPoses: " << gtPoses[0].toMinimalVector().transpose() << endl;
+        cout << "print the first vector of estPoses: " << estPoses[0].toMinimalVector().transpose() << endl;
+        cout << "size of the ground truth poses: " << gtPoses.size() << endl;
+        cout << "size of the estimated poses: " << estPoses.size() << endl;
         // NEW: change the value of num_pose
-        num_pose = vEstPose.size();
+        num_pose = estPoses.size();
         // check if the transformation is correct or not but printing the error between the estimation and the ground truth vector<g2o::Vector6d> errors;
         vector<Eigen::Matrix<double, 4, 4>> errors_full;
         vector<Eigen::Vector3d> errors_t;
@@ -321,12 +281,11 @@ int optimizeGraph(int num_pose = 500, int num_landmarks = 6, double toaNoise = 0
         errors_t.reserve(num_pose);
         for (int i = 0; i < num_pose; i++)
         {
-            // vEstPose[i]*vGtPose[i] does not result in zero error, but the other way around does!!!!???
-            //  CLAUDIO: vEstPose[i]*vGtPose[i] should not be identity. The error of the estimation should be vEstPose[i]*gtPoseWG*vGtPose[i].inverse(), which is identity only in case of perfect odometry
-            cout << "The error between estimation and ground truth is: " << endl
-                 << (vEstPose[i].inverse() * gtPoseWG * vGtPose[i]).toMinimalVector().transpose() << endl;
-            errors_full.push_back((vEstPose[i].inverse() * gtPoseWG * vGtPose[i]).to_homogeneous_matrix());
-            errors_t.push_back((vEstPose[i].inverse() * gtPoseWG * vGtPose[i]).translation());
+            auto errorPose = (estPoses[i] * gtPoseWG * gtPoses[i].inverse());
+            // cout << "The error between estimation and ground truth is: " << endl
+            //      << errorPose.toMinimalVector().transpose() << endl;
+            errors_full.push_back(errorPose.to_homogeneous_matrix());
+            errors_t.push_back(errorPose.translation());
         }
         cout << "Baseline RMSE APE: " << computeAPERMSE(errors_full) << endl;
         cout << "Baseline RMSE ATE: " << computeATERMSE(errors_t) << endl;
@@ -335,7 +294,6 @@ int optimizeGraph(int num_pose = 500, int num_landmarks = 6, double toaNoise = 0
     {
         gtPoseWG = createRandomSE3Increment(3, 30);
     }
-    cout << "Ground truth Twg: " << gtPoseWG.toMinimalVector().transpose() << endl;
 
     vector<Eigen::Vector3d> landmarks;
     landmarks.reserve(num_landmarks);
@@ -354,10 +312,9 @@ int optimizeGraph(int num_pose = 500, int num_landmarks = 6, double toaNoise = 0
     {
         // manual initialization of the landmarks
         // TODO set landmarks to where you would actually place them inside the dataset (i.e., wrt vicon coord frame)
-        std::vector<Eigen::Vector3d> fixed_landmarks = {{0, 0, 0}, {-6, 15, 5}, {10, -3, 8}};
+        std::vector<Eigen::Vector3d> fixed_landmarks = {{1, 3, 1}, {-6, 15, 5}, {10, -3, 8}};
         landmarks.assign(fixed_landmarks.begin(), fixed_landmarks.begin() + min(num_landmarks, static_cast<int>(fixed_landmarks.size())));
     }
-    cout << "landmarks size: " << landmarks.size() << endl;
 
     // These are poses in W frame use this to transform from W -> C
     // Create g2o::SE3Quat object with identity rotation and zero translation
@@ -365,21 +322,19 @@ int optimizeGraph(int num_pose = 500, int num_landmarks = 6, double toaNoise = 0
     if (generate_rnd_poses)
     {
 
-        vGtPose.push_back(origin_pose);
+        gtPoses.push_back(origin_pose);
         for (int i = 1; i < num_pose; i++)
         {
             double translation_stddev = 1; // Standard deviation for translation
             double rotation_stddev = .5;   // Standard deviation for rotation
             g2o::SE3Quat random_increment = createRandomSE3Increment(translation_stddev, rotation_stddev);
-            g2o::SE3Quat p = random_increment * vGtPose[i - 1];
+            g2o::SE3Quat p = random_increment * gtPoses[i - 1];
             cout << i << "th GT pose: " << random_increment.toMinimalVector().transpose() << endl;
-            vGtPose.push_back(p);
+            gtPoses.push_back(p);
         }
     }
     else
-        origin_pose = vEstPose[0];
-
-    cout << "Num of poses to estimate:" << num_pose << endl;
+        origin_pose = estPoses[0];
 
     // Setup optimizer
     g2o::SparseOptimizer optimizer;
@@ -394,45 +349,58 @@ int optimizeGraph(int num_pose = 500, int num_landmarks = 6, double toaNoise = 0
     g2o::VertexSE3Expmap *Twg = new g2o::VertexSE3Expmap();
     Twg->setId(-1);
     // initializing the tf with a possible initial value
-    Twg->setEstimate(createRandomSE3Increment(0, 0) * gtPoseWG);
-    // Twg->setEstimate(origin_pose);
+    if (estTwg)
+        Twg->setEstimate(createRandomSE3Increment(.5, .3) * gtPoseWG);
+    else
+    {
+        Twg->setEstimate(gtPoseWG);
+        Twg->setFixed(true);
+    }
+
+    cout << "Ground truth TWG: " << gtPoseWG.toMinimalVector().transpose() << endl;
+    cout << "Initial TWG: " << Twg->estimate().toMinimalVector().transpose() << endl;
+    cout << "Init APE Twg: " << computeAPERMSE({(Twg->estimate() * gtPoseWG.inverse()).to_homogeneous_matrix()}) << endl;
+    cout << "Init ATE Twg: " << computeATERMSE({(Twg->estimate() * gtPoseWG.inverse()).translation()}) << endl;
+
+
     if (addToAFactors)
         optimizer.addVertex(Twg);
 
     for (int i = 0; i < num_pose; i++)
     {
 
-        g2o::SE3Quat currPose = vGtPose[i];
+        g2o::SE3Quat currPose = gtPoses[i];
         // add the keyframe vertex
         g2o::VertexSE3Expmap *v = new g2o::VertexSE3Expmap();
         v->setId(i);
         if (i == 0)
         {
-            v->setFixed(true);
+            // v->setFixed(true);
             v->setEstimate(origin_pose);
         }
         else
         {
-            g2o::SE3Quat meas;
+            g2o::SE3Quat meas_b1_to_b2;
             if (generate_rnd_poses)
             {
                 g2o::SE3Quat random_increment = createRandomSE3Increment(0.05, 0.05);
                 cout << "Random SE3 increment from node " << i << " to node " << i - 1 << ": " << random_increment.toMinimalVector().transpose() << endl;
-                meas = random_increment * currPose * vGtPose[i - 1].inverse();
+                meas_b1_to_b2 = random_increment * currPose * gtPoses[i - 1].inverse();
             }
             else
             {
-                meas = vEstPose[i] * vEstPose[i - 1].inverse();
+                meas_b1_to_b2 = estPoses[i] * estPoses[i - 1].inverse();
             }
 
             g2o::VertexSE3Expmap *prevPose = dynamic_cast<g2o::VertexSE3Expmap *>(optimizer.vertex(i - 1));
-            v->setEstimate(meas * prevPose->estimate());
-            // v->setFixed(true);
+            v->setEstimate(meas_b1_to_b2 * prevPose->estimate());
+            // if (estTwg)
+            //     v->setFixed(true);
 
             g2o::EdgeSE3 *e = new g2o::EdgeSE3();
-            e->setMeasurement(meas);
+            e->setMeasurement(meas_b1_to_b2);
             // TODO: add a variable for the information matrix of the poses
-            e->setInformation(.001 * Eigen::Matrix<double, 6, 6>::Identity());
+            e->setInformation(.5 * Eigen::Matrix<double, 6, 6>::Identity());
             e->setVertex(0, optimizer.vertex(i - 1));
             e->setVertex(1, v);
             optimizer.addEdge(e);
@@ -446,42 +414,51 @@ int optimizeGraph(int num_pose = 500, int num_landmarks = 6, double toaNoise = 0
                 // Measurement is the distance between the landmark and the GT
                 // currposes is Tbg, and l is Tgl, so we just convert tgb->Tgb and subtract them and take norm as both of them are in the same frame (G)
                 // However, in ToAEdgeTr, as the node is Twb, we need transformation, to transform the landmark to the world.
-                auto meas = genToANoise(toaNoise) + (l - currPose.translation()).norm();
-                if (transformation)
-                    addToaEdgeTr(optimizer, l, meas, v, Twg, 0.001);
-                else
-                    // Add EdgeToa without transformation
-                    addToaEdge(optimizer, l, meas, v, gtPoseWG, 0.001);
+                auto meas = genToANoise(toaNoise) + currPose.map(l).norm();
+                ToaEdge *e = new ToaEdge();
+                e->setVertex(0, v);
+                e->setVertex(1, Twg);
+                e->setMeasurement(meas);
+                e->setLandmark(l);
+                e->setInformation(0.00001 * Eigen::Matrix<double, 1, 1>::Identity());
+                optimizer.addEdge(e);
             }
         }
     }
 
     // Optimize the graph
-    cout << "Number of vertices: " << optimizer.vertices().size() << endl;
+    cout << "-------------OPTIMIZATION START----------------" << endl;
+    cout << "Nom of landmarks: " << landmarks.size() << endl;
+    cout << "Num of frames:" << num_pose << endl;
+    cout << "Number of nodes: " << optimizer.vertices().size() << endl;
     cout << "Number of edges: " << optimizer.edges().size() << endl;
-    cout << endl;
     optimizer.initializeOptimization();
     optimizer.computeActiveErrors();
-    optimizer.optimize(30);
+    optimizer.optimize(50);
     optimizer.computeActiveErrors();
+    cout << "-------------OPTIMIZATION END------------------" << endl;
+    cout << endl;
 
     vector<Eigen::Matrix<double, 4, 4>> errors;
-    errors.reserve(vGtPose.size());
+    errors.reserve(gtPoses.size());
     vector<Eigen::Vector3d> errors_t;
-    errors_t.reserve(vGtPose.size());
+    errors_t.reserve(gtPoses.size());
 
-    cout << "vGtPose.size() " << vGtPose.size() << endl;
-    for (int i = 0; i < vGtPose.size(); i++)
+    g2o::VertexSE3Expmap *estOrigin = dynamic_cast<g2o::VertexSE3Expmap *>(optimizer.vertex(0));
+    //recompute gtPOseWG in case origin has moved
+    gtPoseWG = (estOrigin->estimate()).inverse() * gtPoses[0];
+
+    for (int i = 0; i < gtPoses.size(); i++)
     {
         g2o::VertexSE3Expmap *v = dynamic_cast<g2o::VertexSE3Expmap *>(optimizer.vertex(i));
-        errors.push_back((v->estimate() * gtPoseWG * vGtPose[i]).to_homogeneous_matrix());
-        errors_t.push_back((v->estimate() * gtPoseWG * vGtPose[i]).translation());
+        auto errorPose = (v->estimate() * gtPoseWG * gtPoses[i].inverse());
+        errors.push_back(errorPose.to_homogeneous_matrix());
+        errors_t.push_back(errorPose.translation());
     }
 
     cout << "RMSE APE Poses: " << computeAPERMSE(errors) << endl;
-    cout << "--------------------------------------------" << endl;
     cout << "RMSE ATE Poses: " << computeATERMSE(errors_t) << endl;
-    cout << endl;
+    cout << "--------------------------------------------" << endl;
 
     if (addToAFactors)
     {

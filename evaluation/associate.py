@@ -43,7 +43,8 @@ For this purpose, you can use the ''associate.py'' script. It reads the time sta
 import argparse
 import sys
 import os
-import numpy
+import numpy as np
+from scipy.spatial.transform import Rotation
 
 
 def read_file_list(filename, remove_bounds=False):
@@ -137,6 +138,7 @@ def associate(first_list, second_list, offset, max_difference):
 
 if __name__ == '__main__':
 
+
     # parse command line
     parser = argparse.ArgumentParser(description='''
     This script takes two data files with timestamps and associates them
@@ -163,10 +165,27 @@ if __name__ == '__main__':
         for a, b in matches:
             print("%f %s" % (a, " ".join(first_list[a])))
     else:
+        Tbv = np.array([[0.33638, -0.01749, 0.94156, 0.06901],
+                [-0.02078, -0.99972, -0.01114, -0.02781],
+                [0.94150, -0.01582, -0.33665, -0.12395],
+                [0.0, 0.0, 0.0, 1.0]], dtype=np.float32)
+
+        Tvb = np.eye(4)
+
+        Tvb[:3, :3] = Tbv[:3, :3].T
+        Tvb[:3, -1] = Tvb[:3, :3] @ -Tbv[:3, -1]
+
         lines = [[], [], []]
         for a, b in matches:
 
             first_list[a][3], first_list[a][-1] = first_list[a][-1], first_list[a][3]
+
+            R = Rotation.from_quat([float(x) for x in first_list[a][3:]]).as_matrix()
+            T = np.vstack([np.hstack([R, np.array([float(x) for x in first_list[a][:3]], dtype=R.dtype).reshape(3, 1)]), np.array([0, 0, 0, 1])])
+            T1 = T @ np.linalg.inv(Tbv)
+
+            first_list[a][:3] = [str(x) for x in T1[:3, -1].tolist()]
+            first_list[a][3:] = [str(x) for x in Rotation.from_matrix(T1[:3, :3]).as_quat().tolist()]
 
             print("%f %s %f %s" % (a, " ".join(
                 first_list[a]), b-float(args.offset), " ".join(second_list[b])))
